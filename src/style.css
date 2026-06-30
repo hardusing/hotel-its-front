@@ -115,6 +115,40 @@ a {
   color: #fff;
 }
 
+/* Language switch */
+.lang-switch {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-left: 8px;
+}
+
+.lang-switch__btn {
+  padding: 6px 16px;
+  border: none;
+  background-color: transparent;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.lang-switch__btn:hover {
+  color: var(--color-primary);
+}
+
+.lang-switch__btn--active {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+
+.lang-switch__btn--active:hover {
+  color: #fff;
+}
+
 /* Hero */
 .hero {
   position: relative;

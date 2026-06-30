@@ -1,1 +1,100 @@
 import './style.css';
+
+// ページ内の全テキストをまとめて管理する翻訳オブジェクト。
+// キーは HTML 側の data-i18n と対応する。
+const translations = {
+  ja: {
+    'nav.home': 'ホーム',
+    'nav.rooms': '客室',
+    'nav.access': 'アクセス',
+    'nav.reserve': '予約',
+    'hero.title': '空に一番近い、やすらぎのひととき',
+    'hero.subtitle': '都会の真ん中で過ごす、上質な滞在体験を。',
+    'hero.cta': '今すぐ予約する',
+    'rooms.title': '客室紹介',
+    'rooms.lead': '用途に合わせてお選びいただける、3つの客室タイプ。',
+    'rooms.perNight': '/泊',
+    'rooms.single.name': 'シングル',
+    'rooms.single.desc':
+      '出張や一人旅に最適なコンパクトルーム。機能的な設備で快適な一夜をお約束します。',
+    'rooms.double.name': 'ダブル',
+    'rooms.double.desc':
+      'ゆとりのある広さと上質なベッドを備えたお部屋。カップルやご夫婦の滞在にぴったりです。',
+    'rooms.suite.name': 'スイート',
+    'rooms.suite.desc':
+      '眺望と空間を贅沢に楽しむ最上級のお部屋。特別な記念日にふさわしいおもてなしを。',
+    'access.title': 'アクセス',
+    'access.address.term': '住所',
+    'access.address.desc': '東空市スカイライン区タワー通り1-2-3',
+    'access.station.term': '最寄り駅',
+    'access.station.desc': 'クラウド駅から徒歩5分',
+    'access.hours.term': '営業情報',
+    'access.hours.desc': 'チェックイン 15:00 ／ チェックアウト 11:00',
+    'reserve.title': 'ご予約はこちらから',
+    'reserve.text': '特別な一日を、Hotel ITS で。',
+    'reserve.cta': '予約する',
+    'footer.copy': '© 2026 Hotel ITS. All rights reserved.',
+  },
+  en: {
+    'nav.home': 'Home',
+    'nav.rooms': 'Rooms',
+    'nav.access': 'Access',
+    'nav.reserve': 'Reserve',
+    'hero.title': 'The closest place to the sky, a moment of serenity',
+    'hero.subtitle': 'A refined stay in the heart of the city.',
+    'hero.cta': 'Book Now',
+    'rooms.title': 'Our Rooms',
+    'rooms.lead': 'Three room types to suit every kind of stay.',
+    'rooms.perNight': '/night',
+    'rooms.single.name': 'Single',
+    'rooms.single.desc':
+      'A compact room ideal for business trips and solo travelers. Functional amenities ensure a comfortable night.',
+    'rooms.double.name': 'Double',
+    'rooms.double.desc':
+      'A spacious room with a premium bed. Perfect for couples and partners.',
+    'rooms.suite.name': 'Suite',
+    'rooms.suite.desc':
+      'Our finest room, with luxurious space and stunning views. Fitting hospitality for special occasions.',
+    'access.title': 'Access',
+    'access.address.term': 'Address',
+    'access.address.desc': '1-2-3 Tower St., Skyline Ward, Tozora City',
+    'access.station.term': 'Nearest Station',
+    'access.station.desc': '5 min walk from Cloud Station',
+    'access.hours.term': 'Hours',
+    'access.hours.desc': 'Check-in 15:00 / Check-out 11:00',
+    'reserve.title': 'Make a Reservation',
+    'reserve.text': 'Spend a special day at Hotel ITS.',
+    'reserve.cta': 'Reserve',
+    'footer.copy': '© 2026 Hotel ITS. All rights reserved.',
+  },
+};
+
+const langButtons = document.querySelectorAll('.lang-switch__btn');
+
+function applyLanguage(lang) {
+  const dict = translations[lang];
+  if (!dict) return;
+
+  // data-i18n を持つ全要素のテキストを差し替える
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.dataset.i18n;
+    if (dict[key] !== undefined) {
+      el.textContent = dict[key];
+    }
+  });
+
+  // <html lang="..."> も更新
+  document.documentElement.lang = lang;
+
+  // 選択中の言語ボタンを強調表示
+  langButtons.forEach((btn) => {
+    btn.classList.toggle('lang-switch__btn--active', btn.dataset.lang === lang);
+  });
+}
+
+langButtons.forEach((btn) => {
+  btn.addEventListener('click', () => applyLanguage(btn.dataset.lang));
+});
+
+// 初期表示は日本語
+applyLanguage('ja');

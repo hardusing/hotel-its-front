@@ -11,49 +11,53 @@
       <a href="#" class="header__logo">Hotel ITS</a>
       <nav class="nav">
         <ul class="nav__list">
-          <li><a href="#hero" class="nav__link">ホーム</a></li>
-          <li><a href="#rooms" class="nav__link">客室</a></li>
-          <li><a href="#access" class="nav__link">アクセス</a></li>
-          <li><a href="#reserve" class="nav__link nav__link--cta">予約</a></li>
+          <li><a href="#hero" class="nav__link" data-i18n="nav.home">ホーム</a></li>
+          <li><a href="#rooms" class="nav__link" data-i18n="nav.rooms">客室</a></li>
+          <li><a href="#access" class="nav__link" data-i18n="nav.access">アクセス</a></li>
+          <li><a href="#reserve" class="nav__link nav__link--cta" data-i18n="nav.reserve">予約</a></li>
         </ul>
       </nav>
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" class="lang-switch__btn" data-lang="ja">JP</button>
+        <button type="button" class="lang-switch__btn" data-lang="en">EN</button>
+      </div>
     </div>
   </header>
 
   <main>
     <section id="hero" class="hero">
       <div class="container hero__inner">
-        <h1 class="hero__title">空に一番近い、やすらぎのひととき</h1>
-        <p class="hero__subtitle">都会の真ん中で過ごす、上質な滞在体験を。</p>
-        <a href="#reserve" class="btn btn--primary hero__cta">今すぐ予約する</a>
+        <h1 class="hero__title" data-i18n="hero.title">空に一番近い、やすらぎのひととき</h1>
+        <p class="hero__subtitle" data-i18n="hero.subtitle">都会の真ん中で過ごす、上質な滞在体験を。</p>
+        <a href="#reserve" class="btn btn--primary hero__cta" data-i18n="hero.cta">今すぐ予約する</a>
       </div>
     </section>
 
     <section id="rooms" class="rooms">
       <div class="container">
-        <h2 class="section__title">客室紹介</h2>
-        <p class="section__lead">用途に合わせてお選びいただける、3つの客室タイプ。</p>
+        <h2 class="section__title" data-i18n="rooms.title">客室紹介</h2>
+        <p class="section__lead" data-i18n="rooms.lead">用途に合わせてお選びいただける、3つの客室タイプ。</p>
         <div class="rooms__grid">
           <article class="room-card">
-            <h3 class="room-card__name">シングル</h3>
-            <p class="room-card__price">¥12,800<span>/泊</span></p>
-            <p class="room-card__desc">
+            <h3 class="room-card__name" data-i18n="rooms.single.name">シングル</h3>
+            <p class="room-card__price">¥12,800<span data-i18n="rooms.perNight">/泊</span></p>
+            <p class="room-card__desc" data-i18n="rooms.single.desc">
               出張や一人旅に最適なコンパクトルーム。
               機能的な設備で快適な一夜をお約束します。
             </p>
           </article>
           <article class="room-card room-card--featured">
-            <h3 class="room-card__name">ダブル</h3>
-            <p class="room-card__price">¥24,500<span>/泊</span></p>
-            <p class="room-card__desc">
+            <h3 class="room-card__name" data-i18n="rooms.double.name">ダブル</h3>
+            <p class="room-card__price">¥24,500<span data-i18n="rooms.perNight">/泊</span></p>
+            <p class="room-card__desc" data-i18n="rooms.double.desc">
               ゆとりのある広さと上質なベッドを備えたお部屋。
               カップルやご夫婦の滞在にぴったりです。
             </p>
           </article>
           <article class="room-card">
-            <h3 class="room-card__name">スイート</h3>
-            <p class="room-card__price">¥68,000<span>/泊</span></p>
-            <p class="room-card__desc">
+            <h3 class="room-card__name" data-i18n="rooms.suite.name">スイート</h3>
+            <p class="room-card__price">¥68,000<span data-i18n="rooms.perNight">/泊</span></p>
+            <p class="room-card__desc" data-i18n="rooms.suite.desc">
               眺望と空間を贅沢に楽しむ最上級のお部屋。
               特別な記念日にふさわしいおもてなしを。
             </p>
@@ -64,19 +68,19 @@
 
     <section id="access" class="access">
       <div class="container">
-        <h2 class="section__title">アクセス</h2>
+        <h2 class="section__title" data-i18n="access.title">アクセス</h2>
         <dl class="access__list">
           <div class="access__item">
-            <dt class="access__term">住所</dt>
-            <dd class="access__desc">東空市スカイライン区タワー通り1-2-3</dd>
+            <dt class="access__term" data-i18n="access.address.term">住所</dt>
+            <dd class="access__desc" data-i18n="access.address.desc">東空市スカイライン区タワー通り1-2-3</dd>
           </div>
           <div class="access__item">
-            <dt class="access__term">最寄り駅</dt>
-            <dd class="access__desc">クラウド駅から徒歩5分</dd>
+            <dt class="access__term" data-i18n="access.station.term">最寄り駅</dt>
+            <dd class="access__desc" data-i18n="access.station.desc">クラウド駅から徒歩5分</dd>
           </div>
           <div class="access__item">
-            <dt class="access__term">営業情報</dt>
-            <dd class="access__desc">チェックイン 15:00 ／ チェックアウト 11:00</dd>
+            <dt class="access__term" data-i18n="access.hours.term">営業情報</dt>
+            <dd class="access__desc" data-i18n="access.hours.desc">チェックイン 15:00 ／ チェックアウト 11:00</dd>
           </div>
         </dl>
       </div>
@@ -84,16 +88,16 @@
 
     <section id="reserve" class="reserve">
       <div class="container reserve__inner">
-        <h2 class="reserve__title">ご予約はこちらから</h2>
-        <p class="reserve__text">特別な一日を、Hotel ITS で。</p>
-        <a href="#reserve" class="btn btn--primary">予約する</a>
+        <h2 class="reserve__title" data-i18n="reserve.title">ご予約はこちらから</h2>
+        <p class="reserve__text" data-i18n="reserve.text">特別な一日を、Hotel ITS で。</p>
+        <a href="#reserve" class="btn btn--primary" data-i18n="reserve.cta">予約する</a>
       </div>
     </section>
   </main>
 
   <footer class="footer">
     <div class="container">
-      <p class="footer__copy">&copy; 2026 Hotel ITS. All rights reserved.</p>
+      <p class="footer__copy" data-i18n="footer.copy">&copy; 2026 Hotel ITS. All rights reserved.</p>
     </div>
   </footer>
 </body>
