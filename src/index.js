@@ -28,5 +28,11 @@ langButtons.forEach((btn) => {
   btn.addEventListener('click', () => applyLanguage(btn.dataset.lang));
 });
 
-// 初期表示は日本語
-applyLanguage('ja');
+// ブラウザの言語設定から初期表示言語を決定する。
+// 日本語環境（ja, ja-JP など）なら JP、それ以外は EN。
+function detectLanguage() {
+  const browserLang = navigator.language || 'en';
+  return browserLang.toLowerCase().startsWith('ja') ? 'ja' : 'en';
+}
+
+applyLanguage(detectLanguage());
