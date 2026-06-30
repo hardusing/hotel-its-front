@@ -24,8 +24,19 @@ function applyLanguage(lang) {
   });
 }
 
+// URL のクエリパラメータ（?lang=...）を現在の言語に書き換える。
+// 履歴を増やさないよう replaceState を使う。
+function updateUrlParam(lang) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('lang', lang);
+  window.history.replaceState({}, '', url);
+}
+
 langButtons.forEach((btn) => {
-  btn.addEventListener('click', () => applyLanguage(btn.dataset.lang));
+  btn.addEventListener('click', () => {
+    applyLanguage(btn.dataset.lang);
+    updateUrlParam(btn.dataset.lang);
+  });
 });
 
 // ブラウザの言語設定から初期表示言語を決定する。
@@ -35,4 +46,15 @@ function detectLanguage() {
   return browserLang.toLowerCase().startsWith('ja') ? 'ja' : 'en';
 }
 
-applyLanguage(detectLanguage());
+// 初期表示言語を決定する。
+// 1. URL の ?lang=（対応言語のみ有効）
+// 2. なければブラウザの言語検出にフォールバック
+function resolveInitialLanguage() {
+  const param = new URLSearchParams(window.location.search).get('lang');
+  if (param && translations[param]) {
+    return param;
+  }
+  return detectLanguage();
+}
+
+applyLanguage(resolveInitialLanguage());
