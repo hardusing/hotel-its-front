@@ -216,10 +216,11 @@ a {
 
 .room-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
   background-color: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  padding: 44px 32px;
   text-align: center;
   overflow: hidden;
   transition: transform 0.28s ease, box-shadow 0.28s ease,
@@ -258,18 +259,59 @@ a {
   transform: scaleX(1);
 }
 
+/* Card media (image + badge) */
+.room-card__media {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  background-color: var(--color-bg-alt);
+  overflow: hidden;
+}
+
+.room-card__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.4s ease;
+}
+
+.room-card:hover .room-card__img {
+  transform: scale(1.05);
+}
+
+.room-card__badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background-color: #d64545;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+/* Card body */
+.room-card__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 32px 28px;
+}
+
 .room-card__name {
   font-size: 1.4rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .room-card__price {
   font-size: 2rem;
   font-weight: 700;
   color: var(--color-primary);
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
 .room-card__price span {
@@ -281,6 +323,37 @@ a {
 
 .room-card__desc {
   font-size: 0.95rem;
+  color: var(--color-muted);
+  margin-bottom: 18px;
+}
+
+.room-card__stock {
+  font-size: 0.9rem;
+  color: var(--color-text);
+  margin-bottom: 24px;
+}
+
+/* 予約ボタンはカード下端に揃える */
+.room-card__reserve {
+  margin-top: auto;
+}
+
+.room-card__reserve:disabled {
+  background-color: #cbd2d9;
+  color: #fff;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* 満室のカード */
+.room-card--soldout .room-card__img {
+  filter: grayscale(0.4);
+  opacity: 0.85;
+}
+
+.rooms__error {
+  grid-column: 1 / -1;
+  text-align: center;
   color: var(--color-muted);
 }
 
@@ -332,6 +405,333 @@ a {
   font-size: 1.05rem;
   color: var(--color-muted);
   margin-bottom: 44px;
+}
+
+/* Room detail modal */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal[hidden] {
+  display: none;
+}
+
+.modal__overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(15, 32, 51, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.modal__dialog {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background-color: var(--color-bg);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.85);
+  color: var(--color-text);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.modal__close:hover {
+  background-color: #fff;
+}
+
+.modal__media {
+  aspect-ratio: 3 / 2;
+  background-color: var(--color-bg-alt);
+  border-radius: var(--radius) var(--radius) 0 0;
+  overflow: hidden;
+}
+
+.modal__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.modal__body {
+  padding: 28px 32px 32px;
+}
+
+.modal__name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+
+.modal__price {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 16px;
+}
+
+.modal__price span {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--color-muted);
+  margin-left: 4px;
+}
+
+.modal__desc {
+  font-size: 0.95rem;
+  color: var(--color-muted);
+  margin-bottom: 28px;
+}
+
+/* Booking (date picker + price) */
+.booking__fields {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.booking__field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.booking__label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 6px;
+}
+
+.booking__input {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: var(--color-text);
+}
+
+.booking__input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(26, 111, 181, 0.15);
+}
+
+.booking__summary {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-text);
+  text-align: center;
+  padding: 14px;
+  margin-bottom: 20px;
+  background-color: var(--color-bg-alt);
+  border-radius: 8px;
+}
+
+.booking__reserve {
+  width: 100%;
+}
+
+.booking__reserve:disabled {
+  background-color: #cbd2d9;
+  color: #fff;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (max-width: 480px) {
+  .booking__fields {
+    flex-direction: column;
+  }
+}
+
+/* Reservation form */
+.reservation-form__back {
+  border: none;
+  background: none;
+  padding: 0;
+  margin-bottom: 12px;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.reservation-form__back:hover {
+  color: var(--color-primary);
+}
+
+.reservation-form__title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.reservation-form__summary {
+  font-size: 0.9rem;
+  color: var(--color-muted);
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  background-color: var(--color-bg-alt);
+  border-radius: 8px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 16px;
+}
+
+.field__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.field__req,
+.field__opt {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.field__req {
+  background-color: #fdeaea;
+  color: #d64545;
+}
+
+.field__opt {
+  background-color: var(--color-bg-alt);
+  color: var(--color-muted);
+}
+
+.field__input {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: var(--color-text);
+}
+
+.field__input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(26, 111, 181, 0.15);
+}
+
+.field__input--error {
+  border-color: #d64545;
+}
+
+.field__textarea {
+  resize: vertical;
+}
+
+.field__error {
+  min-height: 1.1em;
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: #d64545;
+}
+
+.reservation-form__error {
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+  color: #d64545;
+  background-color: #fdeaea;
+  border-radius: 8px;
+}
+
+.reservation-form__submit {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.reservation-form__submit:disabled {
+  background-color: #cbd2d9;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Booking complete */
+.booking-complete {
+  text-align: center;
+  padding: 20px 8px 8px;
+}
+
+.booking-complete__icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: #e6f4ea;
+  color: #2e9e5b;
+  font-size: 2rem;
+}
+
+.booking-complete__title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+.booking-complete__label {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  margin-bottom: 4px;
+}
+
+.booking-complete__order {
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-primary);
+  padding: 12px;
+  margin-bottom: 20px;
+  background-color: var(--color-bg-alt);
+  border-radius: 8px;
+}
+
+.booking-complete__note {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  margin-bottom: 28px;
+}
+
+.booking-complete__close {
+  width: 100%;
 }
 
 /* Footer */

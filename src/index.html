@@ -37,31 +37,8 @@
       <div class="container">
         <h2 class="section__title" data-i18n="rooms.title">客室紹介</h2>
         <p class="section__lead" data-i18n="rooms.lead">用途に合わせてお選びいただける、3つの客室タイプ。</p>
-        <div class="rooms__grid">
-          <article class="room-card">
-            <h3 class="room-card__name" data-i18n="rooms.single.name">シングル</h3>
-            <p class="room-card__price">¥12,800<span data-i18n="rooms.perNight">/泊</span></p>
-            <p class="room-card__desc" data-i18n="rooms.single.desc">
-              出張や一人旅に最適なコンパクトルーム。
-              機能的な設備で快適な一夜をお約束します。
-            </p>
-          </article>
-          <article class="room-card room-card--featured">
-            <h3 class="room-card__name" data-i18n="rooms.double.name">ダブル</h3>
-            <p class="room-card__price">¥24,500<span data-i18n="rooms.perNight">/泊</span></p>
-            <p class="room-card__desc" data-i18n="rooms.double.desc">
-              ゆとりのある広さと上質なベッドを備えたお部屋。
-              カップルやご夫婦の滞在にぴったりです。
-            </p>
-          </article>
-          <article class="room-card">
-            <h3 class="room-card__name" data-i18n="rooms.suite.name">スイート</h3>
-            <p class="room-card__price">¥68,000<span data-i18n="rooms.perNight">/泊</span></p>
-            <p class="room-card__desc" data-i18n="rooms.suite.desc">
-              眺望と空間を贅沢に楽しむ最上級のお部屋。
-              特別な記念日にふさわしいおもてなしを。
-            </p>
-          </article>
+        <div class="rooms__grid" id="rooms-grid">
+          <!-- 客室カードは JS が API から取得して描画する -->
         </div>
       </div>
     </section>
@@ -94,6 +71,97 @@
       </div>
     </section>
   </main>
+
+  <!-- 客室詳細モーダル -->
+  <div class="modal" id="room-modal" hidden>
+    <div class="modal__overlay" data-modal-close></div>
+    <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="modal-name">
+      <button type="button" class="modal__close" data-modal-close aria-label="閉じる">&times;</button>
+      <div class="modal__media" id="modal-media">
+        <img class="modal__img" id="modal-img" src="" alt="" />
+      </div>
+      <div class="modal__body">
+        <!-- ① 客室詳細＋日付選択ビュー -->
+        <div class="modal__view" data-view="detail">
+          <h3 class="modal__name" id="modal-name"></h3>
+          <p class="modal__price" id="modal-price"></p>
+          <p class="modal__desc" id="modal-desc"></p>
+
+          <div class="booking">
+            <div class="booking__fields">
+              <div class="booking__field">
+                <label for="checkin" class="booking__label">チェックイン</label>
+                <input type="date" id="checkin" class="booking__input" />
+              </div>
+              <div class="booking__field">
+                <label for="checkout" class="booking__label">チェックアウト</label>
+                <input type="date" id="checkout" class="booking__input" />
+              </div>
+            </div>
+            <p class="booking__summary" id="booking-summary" hidden></p>
+            <button type="button" class="btn btn--primary booking__reserve" id="booking-reserve" disabled>
+              予約する
+            </button>
+          </div>
+        </div>
+
+        <!-- ② 予約フォームビュー -->
+        <form class="modal__view reservation-form" data-view="form" hidden>
+          <button type="button" class="reservation-form__back" data-form-back>← 戻る</button>
+          <h3 class="reservation-form__title">予約情報の入力</h3>
+          <p class="reservation-form__summary" id="form-summary"></p>
+
+          <div class="field">
+            <label for="guestName" class="field__label">予約者名<span class="field__req">必須</span></label>
+            <input type="text" id="guestName" name="guestName" class="field__input" autocomplete="name" />
+            <span class="field__error" data-error-for="guestName"></span>
+          </div>
+
+          <div class="field">
+            <label for="email" class="field__label">メールアドレス<span class="field__req">必須</span></label>
+            <input type="email" id="email" name="email" class="field__input" autocomplete="email" />
+            <span class="field__error" data-error-for="email"></span>
+          </div>
+
+          <div class="field">
+            <label for="phone" class="field__label">電話番号<span class="field__opt">任意</span></label>
+            <input type="tel" id="phone" name="phone" class="field__input" autocomplete="tel" />
+            <span class="field__error" data-error-for="phone"></span>
+          </div>
+
+          <div class="field">
+            <label for="guests" class="field__label">宿泊人数<span class="field__req">必須</span></label>
+            <select id="guests" name="guests" class="field__input"></select>
+            <span class="field__error" data-error-for="guests"></span>
+          </div>
+
+          <div class="field">
+            <label for="notes" class="field__label">備考<span class="field__opt">任意</span></label>
+            <textarea id="notes" name="notes" class="field__input field__textarea" rows="3"></textarea>
+            <span class="field__error" data-error-for="notes"></span>
+          </div>
+
+          <p class="reservation-form__error" id="form-general-error" hidden></p>
+
+          <button type="submit" class="btn btn--primary reservation-form__submit" id="form-submit">
+            この内容で予約する
+          </button>
+        </form>
+
+        <!-- ③ 予約完了ビュー -->
+        <div class="modal__view booking-complete" data-view="complete" hidden>
+          <div class="booking-complete__icon">✓</div>
+          <h3 class="booking-complete__title">ご予約が完了しました</h3>
+          <p class="booking-complete__label">予約番号</p>
+          <p class="booking-complete__order" id="complete-order"></p>
+          <p class="booking-complete__note">確認メールをお送りしました。予約番号は大切に保管してください。</p>
+          <button type="button" class="btn btn--primary booking-complete__close" data-modal-close>
+            閉じる
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <footer class="footer">
     <div class="container">

@@ -1,5 +1,7 @@
 import './style.css';
 import { translations } from './i18n';
+import { renderRooms } from './renderRooms';
+import { initRoomModal } from './roomModal';
 
 const langButtons = document.querySelectorAll('.lang-switch__btn');
 
@@ -58,3 +60,8 @@ function resolveInitialLanguage() {
 }
 
 applyLanguage(resolveInitialLanguage());
+
+// 客室詳細モーダルを初期化し、客室一覧を API（現在はモック）から取得して描画する。
+// OUT_OF_STOCK 時は在庫が変わったとみなして一覧を再取得する。
+initRoomModal({ onStockChange: renderRooms });
+renderRooms();
