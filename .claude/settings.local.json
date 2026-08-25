@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npm install *)",
-      "Bash(npx webpack *)"
+      "Bash(npx webpack *)",
+      "Bash(python3 /tmp/claude-1000/-home-wh-yan-workspace-hotel-its-front/86eaaf4b-cf6e-4376-8876-3dc7dae63292/scratchpad/count.py chapter1.md)"
     ]
   }
 }

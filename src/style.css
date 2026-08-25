@@ -6,6 +6,9 @@
   --color-bg: #ffffff;
   --color-bg-alt: #f5f7fa;
   --color-border: #e3e8ef;
+  --color-price-low: #2f8f5b;
+  --color-price-mid: #b7791f;
+  --color-price-high: #c05621;
   --max-width: 1080px;
   --radius: 10px;
   --shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
@@ -513,6 +516,23 @@ a {
   margin-bottom: 20px;
 }
 
+/* カレンダーに置き換えた日付入力欄。
+   input は値の保持役として DOM に残すので、見た目だけ消す。 */
+.booking__fields--hidden {
+  display: none;
+}
+
+/* カレンダーで選んだ日付の表示欄 */
+.booking__dates {
+  font-size: 0.95rem;
+  color: var(--color-text);
+  text-align: center;
+  padding: 12px;
+  margin-bottom: 16px;
+  background-color: var(--color-bg-alt);
+  border-radius: 8px;
+}
+
 .booking__field {
   flex: 1;
   display: flex;
@@ -566,6 +586,352 @@ a {
 @media (max-width: 480px) {
   .booking__fields {
     flex-direction: column;
+  }
+}
+
+/* Price calendar */
+.booking__calendar {
+  margin-bottom: 20px;
+}
+
+.calendar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.calendar__title {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.calendar__nav {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.calendar__nav:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.calendar__nav:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* 曜日行と日付セルは同じ 7 列グリッドに揃える。
+   minmax(0, 1fr) にしないと、列幅の下限が中身（¥12,800）の幅になり、
+   狭い画面でグリッドがはみ出して横スクロールが出る。 */
+.calendar__weekdays,
+.calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.calendar__weekdays {
+  margin-bottom: 6px;
+}
+
+.calendar__weekday {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.calendar__day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 52px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 4px 2px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background-color: var(--color-bg);
+  font-family: inherit;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+/* role="row" の行はグリッドの列割りに影響させない */
+.calendar__row {
+  display: contents;
+}
+
+.calendar__day:hover:not([aria-disabled='true']) {
+  border-color: var(--color-primary);
+  background-color: var(--color-bg-alt);
+}
+
+/* 選べないマスも矢印キーで読ませたいので disabled にはしない。
+   見た目と操作感だけを「押せない」side に寄せる。 */
+.calendar__day[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+.calendar__day:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.calendar__date {
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.calendar__price {
+  font-size: 0.6rem;
+  line-height: 1;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+/* 短縮表記は広い画面では出さない。切り替えは下のメディアクエリで行う。 */
+.calendar__price--short {
+  display: none;
+}
+
+/* 料金 3 段階（月内価格の三分位） */
+.calendar__day--low .calendar__price {
+  color: var(--color-price-low);
+}
+
+.calendar__day--mid .calendar__price {
+  color: var(--color-price-mid);
+}
+
+.calendar__day--high .calendar__price {
+  color: var(--color-price-high);
+  font-weight: 600;
+}
+
+/* 今日 */
+.calendar__day--today {
+  border-color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
+/* 選べない日。料金 3 段階より後に書き、同じ詳細度で上書きさせる */
+.calendar__day--soldout,
+.calendar__day--closed {
+  background-color: var(--color-bg-alt);
+}
+
+.calendar__day--soldout .calendar__date,
+.calendar__day--closed .calendar__date {
+  color: var(--color-muted);
+  font-weight: 400;
+}
+
+.calendar__day--soldout .calendar__price,
+.calendar__day--closed .calendar__price {
+  color: var(--color-muted);
+}
+
+.calendar__day--closed .calendar__date {
+  text-decoration: line-through;
+}
+
+/* 過去の日は薄く。範囲外（前後月の埋め）はさらに輪郭も消す */
+.calendar__day--past {
+  opacity: 0.4;
+}
+
+.calendar__day--outside {
+  border-color: transparent;
+  background-color: transparent;
+  opacity: 0.3;
+}
+
+/* 選択状態。他の修飾子より後に置いて、同じ詳細度のまま上書きさせる */
+.calendar__day--in-range {
+  border-color: transparent;
+  background-color: rgba(26, 111, 181, 0.12);
+}
+
+.calendar__day--checkin,
+.calendar__day--checkout {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+  box-shadow: none;
+}
+
+.calendar__day--checkin .calendar__date,
+.calendar__day--checkout .calendar__date,
+.calendar__day--checkin .calendar__price,
+.calendar__day--checkout .calendar__price {
+  color: #fff;
+}
+
+/* 選択中は端を内側に寄せて、範囲がひと続きに見えるようにする */
+.calendar__day--checkin {
+  border-top-right-radius: 2px;
+  border-bottom-right-radius: 2px;
+}
+
+.calendar__day--checkout {
+  border-top-left-radius: 2px;
+  border-bottom-left-radius: 2px;
+}
+
+/* 満室・休館をまたいだときの警告 */
+.calendar__warning {
+  margin-top: 12px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: #d64545;
+  background-color: #fdeaea;
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* 取得中 */
+.calendar__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 240px;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+}
+
+.calendar__spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: calendar-spin 0.8s linear infinite;
+}
+
+@keyframes calendar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 取得失敗 */
+.calendar__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 240px;
+}
+
+.calendar__error-text {
+  font-size: 0.9rem;
+  color: var(--color-muted);
+}
+
+.calendar__retry {
+  padding: 8px 24px;
+  border: 1px solid var(--color-primary);
+  border-radius: 999px;
+  background-color: var(--color-bg);
+  color: var(--color-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.calendar__retry:hover {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+
+/*
+  狭い画面では 7 列を必ず 1 画面に収める（横スクロールを出さない）。
+  モーダルの余白を削って幅を稼いだうえで、セルと文字を段階的に縮める。
+
+  端末幅 380px のとき、1 マスに使える幅は
+    380 − 24(.modal の左右) − 32(.modal__body の左右) − 18(gap 3px × 6) = 306
+    306 ÷ 7 ≒ 43px
+  となり、短縮表記「1.3万」（4 文字 × 約 5px）なら余裕を持って収まる。
+*/
+@media (max-width: 600px) {
+  .modal {
+    padding: 12px;
+  }
+
+  .modal__body {
+    padding: 20px 16px 24px;
+  }
+
+  .calendar__weekdays,
+  .calendar__grid {
+    gap: 3px;
+  }
+
+  .calendar__day {
+    min-height: 46px;
+    gap: 2px;
+    padding: 4px 1px;
+  }
+
+  .calendar__date {
+    font-size: 0.8rem;
+  }
+
+  /* 料金は消さずに短縮表記へ切り替える */
+  .calendar__price--full {
+    display: none;
+  }
+
+  .calendar__price--short {
+    display: block;
+    font-size: 0.6rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .calendar__weekdays,
+  .calendar__grid {
+    gap: 2px;
+  }
+
+  .calendar__day {
+    min-height: 42px;
+  }
+
+  .calendar__date {
+    font-size: 0.75rem;
+  }
+
+  .calendar__price--short {
+    font-size: 0.55rem;
+  }
+
+  .calendar__nav {
+    width: 28px;
+    height: 28px;
+    font-size: 1rem;
+  }
+
+  .calendar__weekday {
+    font-size: 0.7rem;
   }
 }
 

@@ -1,16 +1,18 @@
 import { resolveImageUrl } from './api/rooms';
 import { createReservation } from './api/reservations';
 import { todayStr, addDays, calcNights, calcTotal } from './booking';
+import { createMonthCalendar } from './calendar/monthCalendar';
+import { formatYen } from './format';
 
 let currentRoom = null;
 let els = null;
 // 一覧を再描画するためのコールバック（OUT_OF_STOCK 時に使う）
 let onStockChange = null;
+// 月間料金カレンダーのインスタンス（開くたびに作り直す）
+let calendar = null;
 
-// 料金を「¥12,800」形式にフォーマットする
-function formatYen(value) {
-  return `¥${value.toLocaleString('ja-JP')}`;
-}
+// 日付未選択のときに表示欄へ出す文言
+const NO_DATES_TEXT = '日付を選択してください';
 
 // ビュー（detail / form / complete）を切り替える
 function setView(view) {
@@ -50,6 +52,32 @@ function onCheckinChange() {
       checkout.value = '';
     }
   }
+  updateSummary();
+}
+
+/**
+ * カレンダーで日付が確定／解除されたときに呼ばれる。
+ *
+ * 隠してある input[type=date] が引き続き値の保持役なので、
+ * ここで value を書き戻してから updateSummary() を呼ぶ。
+ * value の代入では change イベントが発火せず onCheckinChange は動かないため、
+ * 料金の再計算はこの明示的な呼び出しに任せる。
+ *
+ * @param {?{checkIn: string, checkOut: string, nights: number}} range 解除時は null
+ */
+function onCalendarSelect(range) {
+  const { checkin, checkout, dates } = els;
+
+  if (!range) {
+    checkin.value = '';
+    checkout.value = '';
+    dates.textContent = NO_DATES_TEXT;
+  } else {
+    checkin.value = range.checkIn;
+    checkout.value = range.checkOut;
+    dates.textContent = `${range.checkIn} 〜 ${range.checkOut}（${range.nights}泊）`;
+  }
+
   updateSummary();
 }
 
@@ -207,6 +235,16 @@ export function openRoomModal(room) {
   els.price.innerHTML = `${formatYen(room.price)}<span>/泊</span>`;
   els.desc.textContent = room.description;
 
+  // 月間料金カレンダー。部屋ごとに料金が違うので、開くたびに作り直す。
+  // 前回のものが残っていれば先に破棄してから差し込む。
+  if (calendar) calendar.destroy();
+  calendar = createMonthCalendar({
+    roomId: room.id,
+    onSelect: onCalendarSelect,
+  });
+  els.calendarMount.appendChild(calendar.el);
+  els.dates.textContent = NO_DATES_TEXT;
+
   const today = todayStr();
   els.checkin.min = today;
   els.checkin.value = '';
@@ -227,6 +265,12 @@ export function closeRoomModal() {
   els.modal.hidden = true;
   document.body.style.overflow = '';
   currentRoom = null;
+
+  // カレンダーは開くたびに作り直すので、閉じる時点で破棄する
+  if (calendar) {
+    calendar.destroy();
+    calendar = null;
+  }
 }
 
 /**
@@ -249,6 +293,8 @@ export function initRoomModal(opts = {}) {
     name: document.getElementById('modal-name'),
     price: document.getElementById('modal-price'),
     desc: document.getElementById('modal-desc'),
+    calendarMount: document.getElementById('calendar-mount'),
+    dates: document.getElementById('booking-dates'),
     checkin: document.getElementById('checkin'),
     checkout: document.getElementById('checkout'),
     summary: document.getElementById('booking-summary'),

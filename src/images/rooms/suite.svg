@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="600" height="400" role="img" aria-label="スイートルームのイメージ">
+  <defs>
+    <linearGradient id="u-wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f7f9fc"/>
+      <stop offset="100%" stop-color="#e2e9f2"/>
+    </linearGradient>
+    <linearGradient id="u-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2c4f7c"/>
+      <stop offset="55%" stop-color="#6f8fb8"/>
+      <stop offset="100%" stop-color="#d6c3a8"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="600" height="400" fill="url(#u-wall)"/>
+
+  <!-- パノラマ窓と夜景 -->
+  <rect x="40" y="40" width="520" height="150" rx="5" fill="url(#u-sky)"/>
+  <circle cx="470" cy="80" r="17" fill="#f6ecd2" opacity="0.9"/>
+  <g fill="#1f3557" opacity="0.75">
+    <rect x="70" y="128" width="34" height="62"/>
+    <rect x="112" y="106" width="26" height="84"/>
+    <rect x="146" y="140" width="30" height="50"/>
+    <rect x="186" y="96" width="32" height="94"/>
+    <rect x="226" y="132" width="24" height="58"/>
+    <rect x="258" y="114" width="36" height="76"/>
+    <rect x="302" y="146" width="28" height="44"/>
+    <rect x="338" y="102" width="30" height="88"/>
+    <rect x="376" y="136" width="26" height="54"/>
+    <rect x="410" y="120" width="34" height="70"/>
+    <rect x="452" y="150" width="26" height="40"/>
+    <rect x="486" y="118" width="32" height="72"/>
+  </g>
+  <g fill="#f6d98a" opacity="0.85">
+    <rect x="120" y="118" width="6" height="8"/><rect x="196" y="110" width="6" height="8"/>
+    <rect x="268" y="128" width="6" height="8"/><rect x="346" y="116" width="6" height="8"/>
+    <rect x="420" y="134" width="6" height="8"/><rect x="494" y="132" width="6" height="8"/>
+    <rect x="120" y="140" width="6" height="8"/><rect x="268" y="152" width="6" height="8"/>
+    <rect x="346" y="140" width="6" height="8"/><rect x="494" y="156" width="6" height="8"/>
+  </g>
+  <rect x="40" y="40" width="520" height="150" rx="5" fill="none" stroke="#c3ccd8" stroke-width="9"/>
+  <line x1="213" y1="40" x2="213" y2="190" stroke="#c3ccd8" stroke-width="6"/>
+  <line x1="387" y1="40" x2="387" y2="190" stroke="#c3ccd8" stroke-width="6"/>
+
+  <rect y="272" width="600" height="128" fill="#d5dee9"/>
+  <rect y="268" width="600" height="6" fill="#c3ccd8"/>
+  <ellipse cx="300" cy="340" rx="240" ry="28" fill="#c3ccd8" opacity="0.5"/>
+
+  <!-- ベッド -->
+  <rect x="46" y="206" width="236" height="18" rx="6" fill="#c8d3e0"/>
+  <rect x="36" y="220" width="256" height="48" rx="9" fill="#ffffff" stroke="#dde4ec" stroke-width="3"/>
+  <rect x="36" y="245" width="256" height="23" rx="7" fill="#1a6fb5" opacity="0.8"/>
+  <rect x="60" y="196" width="74" height="26" rx="10" fill="#ffffff" stroke="#dde4ec" stroke-width="3"/>
+  <rect x="196" y="196" width="74" height="26" rx="10" fill="#ffffff" stroke="#dde4ec" stroke-width="3"/>
+
+  <!-- ソファとテーブル -->
+  <rect x="356" y="212" width="140" height="20" rx="8" fill="#b9c6d4"/>
+  <rect x="350" y="228" width="152" height="34" rx="9" fill="#cfd9e5"/>
+  <rect x="358" y="262" width="11" height="16" rx="3" fill="#a9b6c6"/>
+  <rect x="483" y="262" width="11" height="16" rx="3" fill="#a9b6c6"/>
+  <circle cx="530" cy="250" r="22" fill="#c8d3e0"/>
+  <rect x="527" y="250" width="6" height="28" rx="2" fill="#b0bccb"/>
+</svg>

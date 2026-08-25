@@ -1,10 +1,6 @@
 import { fetchRooms, resolveImageUrl } from './api/rooms';
 import { openRoomModal } from './roomModal';
-
-// 料金を「¥12,800」形式にフォーマットする
-function formatPrice(price) {
-  return `¥${price.toLocaleString('ja-JP')}`;
-}
+import { formatYen } from './format';
 
 // 1件分の客室カード要素を生成する
 function createRoomCard(room) {
@@ -21,7 +17,7 @@ function createRoomCard(room) {
     </div>
     <div class="room-card__body">
       <h3 class="room-card__name">${room.name}</h3>
-      <p class="room-card__price">${formatPrice(room.price)}<span>/泊</span></p>
+      <p class="room-card__price">${formatYen(room.price)}<span>/泊</span></p>
       <p class="room-card__desc">${room.description}</p>
       <p class="room-card__stock">残り ${room.stock} 室</p>
       <button type="button" class="btn btn--primary room-card__reserve" ${

@@ -88,7 +88,18 @@
           <p class="modal__desc" id="modal-desc"></p>
 
           <div class="booking">
-            <div class="booking__fields">
+            <!-- 月間料金カレンダーのマウント先（JS が中身を作る） -->
+            <div class="booking__calendar" id="calendar-mount"></div>
+
+            <!-- カレンダーで選んだ日付の表示欄 -->
+            <p class="booking__dates" id="booking-dates">日付を選択してください</p>
+
+            <!--
+              日付の入力欄はカレンダーに置き換えたが、値の保持役として残す。
+              予約フォームへの受け渡しと送信ペイロードがこの value を参照しているため、
+              削除せず CSS（booking__fields--hidden）で隠している。
+            -->
+            <div class="booking__fields booking__fields--hidden">
               <div class="booking__field">
                 <label for="checkin" class="booking__label">チェックイン</label>
                 <input type="date" id="checkin" class="booking__input" />

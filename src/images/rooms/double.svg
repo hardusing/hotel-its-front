@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="600" height="400" role="img" aria-label="ダブルルームのイメージ">
+  <defs>
+    <linearGradient id="d-wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f5f8fb"/>
+      <stop offset="100%" stop-color="#e4ebf3"/>
+    </linearGradient>
+    <linearGradient id="d-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f3c9a6"/>
+      <stop offset="100%" stop-color="#eaf1f8"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="600" height="400" fill="url(#d-wall)"/>
+  <rect y="270" width="600" height="130" fill="#d5dee9"/>
+  <rect y="266" width="600" height="6" fill="#c3ccd8"/>
+  <ellipse cx="300" cy="336" rx="215" ry="30" fill="#c3ccd8" opacity="0.55"/>
+
+  <!-- 窓（夕景） -->
+  <rect x="420" y="55" width="140" height="155" rx="4" fill="url(#d-sky)"/>
+  <circle cx="490" cy="140" r="20" fill="#f0a868" opacity="0.85"/>
+  <path d="M420 178 L455 158 L490 176 L525 152 L560 178 L560 210 L420 210 Z" fill="#c2b6c9"/>
+  <rect x="420" y="55" width="140" height="155" rx="4" fill="none" stroke="#c3ccd8" stroke-width="8"/>
+  <line x1="490" y1="55" x2="490" y2="210" stroke="#c3ccd8" stroke-width="6"/>
+
+  <!-- ベッド（ダブル：枕2つ・幅広） -->
+  <rect x="60" y="108" width="270" height="80" rx="10" fill="#c8d3e0"/>
+  <rect x="48" y="183" width="294" height="56" rx="9" fill="#ffffff" stroke="#dde4ec" stroke-width="3"/>
+  <rect x="48" y="212" width="294" height="27" rx="7" fill="#1a6fb5" opacity="0.8"/>
+  <rect x="74" y="157" width="86" height="30" rx="11" fill="#ffffff" stroke="#dde4ec" stroke-width="3"/>
+  <rect x="228" y="157" width="86" height="30" rx="11" fill="#ffffff" stroke="#dde4ec" stroke-width="3"/>
+  <rect x="58" y="239" width="13" height="24" rx="3" fill="#b0bccb"/>
+  <rect x="319" y="239" width="13" height="24" rx="3" fill="#b0bccb"/>
+
+  <!-- サイドテーブルとランプ -->
+  <rect x="356" y="200" width="56" height="11" rx="3" fill="#c8d3e0"/>
+  <rect x="379" y="211" width="9" height="55" rx="2" fill="#b0bccb"/>
+  <rect x="381" y="174" width="5" height="27" rx="2" fill="#b0bccb"/>
+  <path d="M368 174 L400 174 L393 150 L375 150 Z" fill="#f2c76b"/>
+</svg>
