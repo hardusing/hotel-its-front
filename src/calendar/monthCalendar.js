@@ -8,8 +8,10 @@
 // 不要になったら destroy() を呼ぶだけでよい。
 
 import { fetchMonthlyRates } from '../api/calendar';
-import { todayStr, calcNights } from '../booking';
-import { formatYen, formatYenShort } from '../format';
+import { todayStr, calcNights, addDays } from '../booking';
+import { formatMoney, formatMoneyShort } from '../pricing/format.js';
+import { loadPricingRules, getPricingRules } from '../pricing/rulesStore.js';
+import { toNightlyDisplayPrice, nightlyPriceNote } from '../pricing/displayPrice.js';
 import {
   buildMonthGrid,
   shiftMonth,
@@ -43,9 +45,9 @@ function buildDayLabel(cell, rate, isPast) {
   } else if (rate.closed) {
     parts.push('休館日');
   } else if (!rate.available) {
-    parts.push(`${rate.price.toLocaleString('ja-JP')}円`, '満室');
+    parts.push(formatMoney(toNightlyDisplayPrice(rate.price, getPricingRules())), '満室');
   } else {
-    parts.push(`${rate.price.toLocaleString('ja-JP')}円`, '空室あり', `残り${rate.stock}室`);
+    parts.push(formatMoney(toNightlyDisplayPrice(rate.price, getPricingRules())), '空室あり', `残り${rate.stock}室`);
   }
 
   if (isPast) parts.push('受付終了');
@@ -121,8 +123,11 @@ function createDayCell(cell, rate, today) {
       full = '満';
       short = '満';
     } else {
-      full = formatYen(rate.price);
-      short = formatYenShort(rate.price);
+      // セルに出すのは税込単価。色分けや選択の判定には税抜の rate.price を
+      // 使い続ける（換算しても大小関係は変わらないので、判定側は触らない）。
+      const shown = toNightlyDisplayPrice(rate.price, getPricingRules());
+      full = formatMoney(shown);
+      short = formatMoneyShort(shown);
     }
   }
 
@@ -154,17 +159,31 @@ function createDayCell(cell, rate, today) {
  * @param {number} options.roomId 表示する客室タイプ ID
  * @param {Function} [options.onSelect] 選択が確定したとき
  *   { checkIn, checkOut, nights } を、選択が解除されたとき null を受け取る
+ * @param {?{checkIn: string, checkOut: string}} [options.initialRange]
+ *   最初から選択済みにしておく期間（ディープリンク経由の起動で使う）。
+ *   実際に泊まれるかは料金が届くまで判定できないので、初回取得の完了時に
+ *   検証し、満室・休館をまたぐ場合は選択を解除して onSelect(null) を呼ぶ。
+ * @param {?string} [options.initialMonth] 最初に表示する月 "YYYY-MM"。
+ *   省略時は今日の属する月。過去の月を渡された場合も今月に丸める。
  * @returns {{el: HTMLElement, destroy: Function}}
  *   el      … カレンダーのルート要素
  *   destroy … イベント解除・DOM 破棄。取得中の通信結果も無視するようになる
  */
-export function createMonthCalendar({ roomId, onSelect }) {
+export function createMonthCalendar({ roomId, onSelect, initialRange, initialMonth }) {
   const today = todayStr();
 
   // --- 内部状態 -------------------------------------------------------------
   // 表示中の年月。初期値は今日の属する月。
   let year = Number(today.slice(0, 4));
   let month = Number(today.slice(5, 7));
+
+  // 初期表示月の指定。過去の月は前月ボタンが押せない領域なので今月に丸める
+  // （"YYYY-MM" はゼロ埋め済みなので文字列比較がそのまま前後比較になる）。
+  if (typeof initialMonth === 'string' && /^\d{4}-\d{2}$/.test(initialMonth)) {
+    const key = initialMonth > today.slice(0, 7) ? initialMonth : today.slice(0, 7);
+    year = Number(key.slice(0, 4));
+    month = Number(key.slice(5, 7));
+  }
 
   // 日付選択の状態は、この 2 つだけで表す。
   //
@@ -180,6 +199,23 @@ export function createMonthCalendar({ roomId, onSelect }) {
   // roving tabindex で tabIndex = 0 を持つマスの日付。
   // 矢印キーの移動元でもある。
   let focusDate = null;
+
+  // 初期選択。ここで入れておくと最初の描画から範囲が塗られるが、
+  // 泊まれる日かどうかは料金が届くまで判定できない。判定は初回取得の
+  // 完了時に一度だけ行う（verifyInitialRange）。
+  if (
+    initialRange &&
+    initialRange.checkIn &&
+    initialRange.checkOut &&
+    isSameOrAfter(initialRange.checkIn, today)
+  ) {
+    selection = { checkIn: initialRange.checkIn, checkOut: initialRange.checkOut };
+    // 矢印キーの移動元も選択の始点に寄せておく。
+    focusDate = initialRange.checkIn;
+  }
+
+  // 初期選択の検証が済んだか。初回の取得完了時にだけ走らせる。
+  let initialRangeChecked = selection === null;
 
   // 取得済みの料金辞書。月送りのたびに上書きせず、既に読んだ月にマージしていく。
   // 月をまたいで日付を選んだとき、範囲内の満室・休館を検証するには
@@ -206,11 +242,24 @@ export function createMonthCalendar({ roomId, onSelect }) {
       ).join('')}
     </div>
     <div class="calendar__body" data-body></div>
+    <p class="calendar__tax-note" data-tax-note></p>
   `;
 
   const titleEl = el.querySelector('[data-title]');
   const bodyEl = el.querySelector('[data-body]');
   const prevBtn = el.querySelector('[data-nav="prev"]');
+  const taxNoteEl = el.querySelector('[data-tax-note]');
+
+  // 表示金額の基準（税込かどうか）はルールが届いて初めて確定するので、
+  // 届いた時点で注記を出し、同時にセルを描き直して単価も税込に揃える。
+  loadPricingRules().then(() => {
+    if (destroyed) return;
+    taxNoteEl.textContent = `1泊あたり・${nightlyPriceNote(getPricingRules())}`;
+    // 料金の取得より先にルールが届いた場合、まだ読み込み表示が出ている。
+    // そこへ空のグリッドを描くと読み込み中だと分からなくなるので、
+    // 料金が手元にあるときだけ描き直す（無ければ load 側の描画に任せる）。
+    if (Object.keys(rates).length > 0) renderGrid();
+  });
 
   // --- 描画 -----------------------------------------------------------------
 
@@ -382,11 +431,84 @@ export function createMonthCalendar({ roomId, onSelect }) {
       if (destroyed || currentId !== requestId) return;
       rates = { ...rates, ...result };
       renderGrid();
+      verifyInitialRange();
     } catch (err) {
       if (destroyed || currentId !== requestId) return;
       renderError();
       // eslint-disable-next-line no-console
       console.error(err);
+    }
+  }
+
+  /**
+   * ディープリンクで渡された初期選択を、料金が届いた時点で検証する。
+   *
+   * 選択そのものは描画前に入れてあるので、範囲はすでに塗られている。
+   * ここで泊まれない日を含むと分かった場合だけ選択を落とす。
+   * URL の日付が満室になっているのは普通のことなので、警告は出さず、
+   * 「日付未選択の状態で開いた」のと同じ画面に戻す。
+   *
+   * 1 回きり。以降の月送りでは走らせない（利用者が選び直した結果を
+   * 初期値の都合で消さないため）。
+   */
+  async function verifyInitialRange() {
+    if (initialRangeChecked) return;
+    initialRangeChecked = true;
+
+    if (!selection || !selection.checkOut) return;
+
+    const nights = eachDateBetween(selection.checkIn, selection.checkOut);
+
+    // 月をまたぐ期間は、初回に取得した月だけでは判定できない。料金が無い日を
+    // 「泊まれない日」と扱うと、月末発の連泊がすべて弾かれる。
+    // 足りない月を先に取りにいってから判定する。
+    const missingMonths = [
+      ...new Set(
+        nights.filter((d) => !rates[d]).map((d) => d.slice(0, 7))
+      ),
+    ];
+
+    if (missingMonths.length > 0) {
+      try {
+        const results = await Promise.all(
+          missingMonths.map((key) =>
+            fetchMonthlyRates(roomId, Number(key.slice(0, 4)), Number(key.slice(5, 7)))
+          )
+        );
+        if (destroyed) return;
+        results.forEach((result) => {
+          rates = { ...rates, ...result };
+        });
+      } catch (err) {
+        // 取れなければ判定できない。選択は残さず未選択に戻す
+        // （泊まれるか分からない期間で料金を出すよりは、選び直してもらう）。
+        if (destroyed) return;
+        selection = null;
+        paintSelection();
+        if (onSelect) onSelect(null);
+        // eslint-disable-next-line no-console
+        console.error(err);
+        return;
+      }
+    }
+
+    const blocked = nights.filter((d) => !isStayable(d));
+
+    if (blocked.length > 0) {
+      selection = null;
+      paintSelection();
+      if (onSelect) onSelect(null);
+      return;
+    }
+
+    // 泊まれることが確かめられて初めて、呼び出し側に日付を渡す。
+    // 検証前に渡すと、満室の期間で料金を計算した画面を一瞬見せることになる。
+    if (onSelect) {
+      onSelect({
+        checkIn: selection.checkIn,
+        checkOut: selection.checkOut,
+        nights: calcNights(selection.checkIn, selection.checkOut),
+      });
     }
   }
 
@@ -595,6 +717,32 @@ export function createMonthCalendar({ roomId, onSelect }) {
 
   return {
     el,
+
+    /**
+     * 指定範囲の各泊の単価を返す。料金の計算に日別単価を渡すために使う。
+     *
+     * カレンダーのセルに出している金額と、内訳ビューの合計は同じ数字から
+     * 導かれる必要がある。ここを経由せず room.price だけで計算すると、
+     * 曜日ごとの単価差がそのまま食い違いになる。
+     *
+     * @param {string} checkIn  "YYYY-MM-DD"
+     * @param {number} nights   泊数
+     * @returns {?Array<{date: string, price: number}>} 1泊でも欠けていれば null
+     */
+    getNightlyRates(checkIn, nights) {
+      if (!checkIn || nights <= 0) return null;
+
+      const list = [];
+      for (let i = 0; i < nights; i += 1) {
+        const date = addDays(checkIn, i);
+        const rate = rates[date];
+        // 未取得の月にまたがっている場合は、部分的な単価で計算させない。
+        // 一部だけ日別単価・残りは既定単価、という混ざった金額が一番わかりにくい。
+        if (!rate) return null;
+        list.push({ date, price: rate.price });
+      }
+      return list;
+    },
 
     /**
      * カレンダーを破棄する。

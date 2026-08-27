@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>秋の連泊キャンペーン｜Hotel ITS</title>
+  <meta name="description" content="3泊以上のご予約で対象客室が最大30%OFF。レイトチェックアウト14:00と朝食2名分無料つき。2026年9月1日〜11月30日のご宿泊が対象です。" />
+
+  <!--
+    LP の文言はキャンペーンの内容そのものにする。トップページと同じ
+    ブランド紹介文を貼ると、広告経由で共有されたときに「何の割引なのか」が
+    カードから読み取れず、リンクを開く理由が伝わらない。
+    og:image はキャンペーン専用の画像に差し替えること（絶対 URL）。
+  -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Hotel ITS" />
+  <meta property="og:title" content="秋の連泊キャンペーン｜最大30%OFF｜Hotel ITS" />
+  <meta property="og:description" content="3泊以上のご予約で対象客室が最大30%OFF。レイトチェックアウト14:00と朝食2名分無料つき。2026年9月1日〜11月30日のご宿泊が対象です。" />
+  <meta property="og:url" content="https://example.com/campaign/" />
+  <meta property="og:image" content="https://example.com/images/ogp-campaign.jpg" />
+  <meta property="og:locale" content="ja_JP" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="秋の連泊キャンペーン｜最大30%OFF｜Hotel ITS" />
+  <meta name="twitter:description" content="3泊以上のご予約で対象客室が最大30%OFF。レイトチェックアウト14:00と朝食2名分無料つき。9/1〜11/30のご宿泊が対象。" />
+  <meta name="twitter:image" content="https://example.com/images/ogp-campaign.jpg" />
+</head>
+<body class="campaign-page">
+  <!--
+    グローバルナビは置かない。広告から来た人にとって「客室」「アクセス」への
+    リンクは、いま見せたい 1 つの申し込みから離脱する出口にしかならない。
+    ロゴも h1 ではなくただの表示にとどめ、トップページへのリンクも張らない。
+  -->
+  <main>
+    <section class="campaign-hero">
+      <div class="container campaign-hero__inner">
+        <p class="campaign-hero__brand">Hotel ITS</p>
+
+        <p class="campaign-hero__period">2026.09.01 — 11.30 ご宿泊分</p>
+        <h1 class="campaign-hero__title">秋の連泊キャンペーン</h1>
+
+        <p class="campaign-hero__discount">
+          <span class="campaign-hero__discount-num">30</span><span class="campaign-hero__discount-unit">%</span>
+          <span class="campaign-hero__discount-label">OFF</span>
+        </p>
+        <p class="campaign-hero__lead">
+          対象客室を3泊以上ご予約で、通常料金より最大30%割引。<br />
+          クーポンコード <code class="campaign-hero__code">STAY3</code> をご予約画面でご入力ください。
+        </p>
+
+        <!-- 上部 CTA。ヒーローを読み終えた時点で申し込みへ進める。 -->
+        <a href="#campaign-rooms" class="btn btn--primary campaign-cta__btn campaign-hero__cta">
+          対象のお部屋を見る
+        </a>
+        <p class="campaign-hero__note">※ 予約時に残室がある場合に限ります</p>
+      </div>
+    </section>
+
+    <section class="campaign-points">
+      <div class="container">
+        <h2 class="campaign-points__title">このキャンペーンの3つの特典</h2>
+        <ul class="campaign-points__list">
+          <li class="campaign-point">
+            <p class="campaign-point__icon" aria-hidden="true">%</p>
+            <h3 class="campaign-point__title">3泊以上で最大30%OFF</h3>
+            <p class="campaign-point__text">
+              連泊するほど1泊あたりの料金が下がります。割引は予約画面の料金内訳でその場で確認できます。
+            </p>
+          </li>
+          <li class="campaign-point">
+            <p class="campaign-point__icon" aria-hidden="true">◷</p>
+            <h3 class="campaign-point__title">レイトチェックアウト 14:00</h3>
+            <p class="campaign-point__text">
+              通常11:00のチェックアウトを14:00まで延長。最終日の朝をゆっくりお過ごしいただけます。
+            </p>
+          </li>
+          <li class="campaign-point">
+            <p class="campaign-point__icon" aria-hidden="true">☕</p>
+            <h3 class="campaign-point__title">朝食2名分を無料でご提供</h3>
+            <p class="campaign-point__text">
+              滞在中の朝食が毎日2名分まで無料。ご到着時のお手続きは不要です。
+            </p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="campaign-rooms" class="campaign-rooms">
+      <div class="container">
+        <h2 class="campaign-rooms__title">対象のお部屋</h2>
+        <p class="campaign-rooms__lead">
+          このキャンペーンの対象は下記のお部屋です。「予約する」から日程をお選びください。
+        </p>
+
+        <!--
+          在庫を最後に取得できた時刻。トップページと同じ id・同じ JS を使う。
+          在庫は数十秒遅れの値なので、いつ時点のものかを添える。
+        -->
+        <p class="rooms__updated" id="rooms-updated" role="status" hidden></p>
+
+        <!--
+          カードは JS が描画する（renderRooms に対象客室 ID を渡す）。
+          .rooms__grid をそのまま使うのは、カードの見た目を LP 側で作り直さないため。
+        -->
+        <div class="rooms__grid campaign-rooms__grid" id="campaign-rooms-grid"></div>
+      </div>
+    </section>
+
+    <section class="campaign-cta">
+      <div class="container campaign-cta__inner">
+        <h2 class="campaign-cta__title">キャンペーンは11月30日ご宿泊分まで</h2>
+        <p class="campaign-cta__text">
+          対象客室には限りがあります。ご希望の日程が空いているうちにお申し込みください。
+        </p>
+        <!-- 下部 CTA。読み切った人をページ末尾で行き止まりにしない。 -->
+        <a href="#campaign-rooms" class="btn btn--primary campaign-cta__btn">
+          いますぐ予約する
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <!--
+    客室詳細モーダルはここには書かない。トップページと共通のマークアップを
+    src/modal/roomModalTemplate.js が持ち、initRoomModal() が body へ差し込む。
+  -->
+
+  <!-- フッターは最小限。表記義務のある情報だけを置き、回遊リンクは張らない。 -->
+  <footer class="campaign-footer">
+    <div class="container">
+      <p class="campaign-footer__terms">
+        表示料金は税込・宿泊税別です。割引は他のクーポンと併用できません。予約状況により対象日程でもお受けできない場合があります。
+      </p>
+      <p class="campaign-footer__copy">&copy; 2026 Hotel ITS. All rights reserved.</p>
+    </div>
+  </footer>
+</body>
+</html>

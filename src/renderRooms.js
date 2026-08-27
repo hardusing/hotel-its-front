@@ -1,6 +1,8 @@
 import { fetchRooms, resolveImageUrl } from './api/rooms';
 import { openRoomModal } from './roomModal';
-import { formatYen } from './format';
+import { formatMoney } from './pricing/format.js';
+import { loadPricingRules } from './pricing/rulesStore.js';
+import { toNightlyDisplayPrice, nightlyPriceNote } from './pricing/displayPrice.js';
 import {
   getStockLabel,
   getStockModifier,
@@ -10,6 +12,9 @@ import {
 
 // 在庫が動いたことを知らせるハイライト用の修飾子。
 const UPDATED_CLASS = 'room-card__stock--updated';
+
+// 既定の描画先。トップページの客室一覧。
+const DEFAULT_GRID_ID = 'rooms-grid';
 
 // 直近まで表示していた在庫数（客室 ID → stock）。
 // ポーリングは変化がなくても同じ値を運んでくるので、
@@ -21,6 +26,11 @@ const stockSnapshot = new Map();
 // モーダルはこのオブジェクトを掴んで料金や定員を読むため、
 // 在庫が動いたら DOM だけでなくこちらも合わせて更新する。
 const roomsById = new Map();
+
+// 直近の renderRooms が描画先にしたグリッドの id。
+// トップページは #rooms-grid、キャンペーン LP は #campaign-rooms と描画先が違うので、
+// applyInventory が固定の id を見に行くと LP 側で在庫が一切反映されない。
+let currentGridId = DEFAULT_GRID_ID;
 
 // 在庫表示を一度光らせる。
 function flashStock(stockEl) {
@@ -64,7 +74,7 @@ function updateCardStock(card, room) {
 }
 
 // 1件分の客室カード要素を生成する
-function createRoomCard(room) {
+function createRoomCard(room, rules) {
   // 予約可否は room.available ではなく在庫数だけから決める。
   // 判断の入口を 1 つにしておかないと、在庫を定期取得するようになったとき
   // available の更新漏れがそのまま「押せてしまう満室ボタン」になる。
@@ -78,23 +88,48 @@ function createRoomCard(room) {
     card.classList.add('room-card--soldout');
   }
 
+  // 骨組みだけを innerHTML で作り、外から来る値（客室名・説明・画像パス）は
+  // 一切埋め込まない。現在はモックだが、fetch に切り替えた時点で
+  // これらはサーバーの応答＝外部入力になる。名前に "><img onerror=...> が
+  // 入っていれば、その瞬間に一覧を描くだけでスクリプトが動く。
+  // テンプレートに値を混ぜない作りにしておけば、差し替えの日に見落とさない。
   card.innerHTML = `
     <div class="room-card__media">
-      <img class="room-card__img" src="${resolveImageUrl(room.imagePath)}" alt="${room.name}" loading="lazy" />
+      <img class="room-card__img" alt="" loading="lazy" />
       ${!bookable ? '<span class="room-card__badge">満室</span>' : ''}
     </div>
     <div class="room-card__body">
-      <h3 class="room-card__name">${room.name}</h3>
-      <p class="room-card__price">${formatYen(room.price)}<span>/泊</span></p>
-      <p class="room-card__desc">${room.description}</p>
-      <p class="room-card__stock room-card__stock${getStockModifier(room.stock)}">${getStockLabel(room.stock)}</p>
+      <h3 class="room-card__name"></h3>
+      <p class="room-card__price"></p>
+      <p class="room-card__tax-note"></p>
+      <p class="room-card__desc"></p>
+      <p class="room-card__stock room-card__stock${getStockModifier(room.stock)}"></p>
       <button type="button" class="btn btn--primary room-card__reserve" ${
         bookable ? '' : 'disabled'
-      }>
-        ${bookable ? '予約する' : '満室'}
-      </button>
+      }></button>
     </div>
   `;
+
+  // 画像は属性ではなくプロパティに入れる。属性文字列に混ぜると
+  // 引用符ひとつで属性を抜け出せる（alt="${room.name}" の形が危ない）。
+  const img = card.querySelector('.room-card__img');
+  img.src = resolveImageUrl(room.imagePath);
+  img.alt = room.name;
+
+  card.querySelector('.room-card__name').textContent = room.name;
+  card.querySelector('.room-card__desc').textContent = room.description;
+  card.querySelector('.room-card__stock').textContent = getStockLabel(room.stock);
+  card.querySelector('.room-card__tax-note').textContent =
+    `${nightlyPriceNote(rules)}・曜日により変動`;
+  card.querySelector('.room-card__reserve').textContent = bookable ? '予約する' : '満室';
+
+  // 単価だけは <span> を含むので組み立てる。金額は formatMoney が数値から
+  // 作った文字列なので、外部の文字が混ざる余地がない。
+  const priceEl = card.querySelector('.room-card__price');
+  priceEl.textContent = formatMoney(toNightlyDisplayPrice(room.price, rules));
+  const unit = document.createElement('span');
+  unit.textContent = '/泊〜';
+  priceEl.appendChild(unit);
 
   // ハイライトはアニメーション終了で自分から外れる。生成時に一度だけ張るので、
   // 在庫が何度動いてもリスナが積み上がらない。
@@ -115,6 +150,18 @@ function createRoomCard(room) {
 }
 
 /**
+ * 直近の描画に使った客室オブジェクトを、描画順で返す。
+ * ディープリンクが ?room= の ID から客室を引き当てるのに使う。
+ * 一覧に無い ID（LP の対象外の客室など）はここに現れないので、
+ * 呼び出し側は「このページで開ける部屋か」をこの結果だけで判断できる。
+ *
+ * @returns {Array<Object>}
+ */
+export function getRenderedRooms() {
+  return [...roomsById.values()];
+}
+
+/**
  * 在庫スナップショットを画面に反映する。
  * 前回と同じ在庫の部屋には DOM 操作を一切行わない。
  *
@@ -123,7 +170,7 @@ function createRoomCard(room) {
 export function applyInventory(payload) {
   if (!payload || !Array.isArray(payload.rooms)) return;
 
-  const grid = document.getElementById('rooms-grid');
+  const grid = document.getElementById(currentGridId);
   if (!grid) return;
 
   payload.rooms.forEach((entry) => {
@@ -158,24 +205,49 @@ export function applyInventory(payload) {
 
 /**
  * 客室一覧を取得してグリッドに描画する。
+ *
+ * キャンペーン LP は「対象客室だけを別のグリッドに出す」ため、描画先と
+ * 対象客室を指定できるようにしてある。カードの作り方・在庫の反映・
+ * モーダルの開き方をページごとに書き分けると、満室の扱いのような
+ * 細かい判断が 2 か所に散って必ずずれるので、入口はこの 1 つに保つ。
+ *
+ * @param {Object} [options]
+ * @param {string} [options.gridId] 描画先の要素 id（既定: 'rooms-grid'）
+ * @param {Array<number>} [options.roomIds] 描画する客室 ID。省略時は全件。
+ *   指定した順に並べるので、LP 側で見せたい順を決められる。
  */
-export async function renderRooms() {
-  const grid = document.getElementById('rooms-grid');
+export async function renderRooms(options = {}) {
+  const { gridId = DEFAULT_GRID_ID, roomIds = null } = options;
+
+  const grid = document.getElementById(gridId);
   if (!grid) return;
 
+  // 在庫の反映先を、いま描画したグリッドに合わせる。
+  currentGridId = gridId;
+
   try {
-    const rooms = await fetchRooms();
+    // 客室と料金ルールは互いに独立なので同時に取りにいく。
+    // ルールが無いと税込単価に換算できないため、描画はどちらも揃ってから。
+    const [rooms, rules] = await Promise.all([fetchRooms(), loadPricingRules()]);
 
     // 作り直すカードに合わせて、比較用の状態も必ず作り直す。
     // 残しておくと、再描画直後の 1 回目が「変化なし」と判定されて反映されない。
     stockSnapshot.clear();
     roomsById.clear();
 
+    // 指定があればその順で絞り込む。存在しない ID は黙って落とす
+    // （LP の設定ミスでページ全体を落とさない）。
+    const targets = roomIds
+      ? roomIds
+          .map((id) => rooms.find((room) => Number(room.id) === Number(id)))
+          .filter(Boolean)
+      : rooms;
+
     grid.innerHTML = '';
-    rooms.forEach((room) => {
+    targets.forEach((room) => {
       stockSnapshot.set(Number(room.id), Number(room.stock));
       roomsById.set(Number(room.id), room);
-      grid.appendChild(createRoomCard(room));
+      grid.appendChild(createRoomCard(room, rules));
     });
   } catch (err) {
     stockSnapshot.clear();

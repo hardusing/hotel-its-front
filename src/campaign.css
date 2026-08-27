@@ -1,0 +1,267 @@
+/*
+ * キャンペーン LP 固有のスタイル。
+ *
+ * ここに書くのは LP にしか出てこないブロックだけ。色・角丸・影・最大幅は
+ * style.css の :root で定義済みの変数をそのまま使い、値を再定義しない
+ * （ブランドの色を変えたときに LP だけ取り残されないようにするため）。
+ *
+ * 客室カード（.room-card）・ボタン（.btn）・モーダル（.modal）は
+ * トップページと共通のものを使うので、このファイルには一切書かない。
+ */
+
+/* LP はページ全体の下地をトップページと変える。広告からの着地であることを
+   一目で分かるようにしつつ、客室カードの白は際立たせたい。 */
+.campaign-page {
+  background-color: var(--color-bg-alt);
+}
+
+/* ---------- ヒーロー ---------- */
+
+.campaign-hero {
+  /* 全画面。小さい端末では内容が入り切らないので min-height で下に伸ばす。
+     100svh は iOS のアドレスバーで高さが揺れるのを避けるための指定で、
+     未対応ブラウザには直前の 100vh が効く。 */
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #fff;
+  background-image: linear-gradient(
+    160deg,
+    var(--color-primary) 0%,
+    var(--color-primary-dark) 60%,
+    #0d3f68 100%
+  );
+  padding: 64px 0;
+}
+
+.campaign-hero__inner {
+  max-width: 720px;
+}
+
+.campaign-hero__brand {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  opacity: 0.85;
+  margin-bottom: 40px;
+}
+
+.campaign-hero__period {
+  display: inline-block;
+  padding: 6px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  margin-bottom: 20px;
+}
+
+.campaign-hero__title {
+  font-size: clamp(2rem, 6vw, 3.25rem);
+  line-height: 1.3;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+/* 割引率は LP で最も強い要素。数字だけを大きくし、単位と OFF は添える。 */
+.campaign-hero__discount {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  line-height: 1;
+  margin-bottom: 28px;
+}
+
+.campaign-hero__discount-num {
+  font-size: clamp(4rem, 16vw, 7rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.campaign-hero__discount-unit {
+  font-size: clamp(2rem, 7vw, 3rem);
+  font-weight: 700;
+}
+
+.campaign-hero__discount-label {
+  font-size: clamp(1.25rem, 4vw, 1.75rem);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin-left: 4px;
+}
+
+.campaign-hero__lead {
+  font-size: 1.05rem;
+  line-height: 1.9;
+  margin-bottom: 36px;
+}
+
+.campaign-hero__code {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.18);
+  font-family: inherit;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+/* ヒーロー内の CTA だけは、下地が濃い色なので白抜きで置く。
+   .btn--primary の青は背景に沈んでしまう。 */
+.campaign-hero__cta,
+.campaign-hero__cta:hover {
+  background-color: #fff;
+  color: var(--color-primary-dark);
+}
+
+.campaign-hero__note {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin-top: 16px;
+}
+
+/* ---------- 訴求ポイント3点 ---------- */
+
+.campaign-points {
+  padding: 88px 0;
+  background-color: var(--color-bg);
+}
+
+.campaign-points__title {
+  font-size: 1.75rem;
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.campaign-points__list {
+  list-style: none;
+  display: grid;
+  /* 3点だが、幅が足りなければ自然に段を落とす。件数を増やしても崩れない。 */
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 28px;
+}
+
+.campaign-point {
+  background-color: var(--color-bg-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 32px 28px;
+  text-align: center;
+}
+
+.campaign-point__icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: var(--color-primary);
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.campaign-point__title {
+  font-size: 1.15rem;
+  margin-bottom: 12px;
+}
+
+.campaign-point__text {
+  font-size: 0.95rem;
+  color: var(--color-muted);
+}
+
+/* ---------- 対象客室 ---------- */
+
+.campaign-rooms {
+  padding: 88px 0;
+  /* CTA から飛んできたときに見出しがヘッダーの裏に隠れないための余白。
+     LP にヘッダーは無いが、ブラウザの UI と詰まって見えるのを避ける。 */
+  scroll-margin-top: 24px;
+}
+
+.campaign-rooms__title {
+  font-size: 1.75rem;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.campaign-rooms__lead {
+  text-align: center;
+  color: var(--color-muted);
+  margin-bottom: 40px;
+}
+
+/* 対象は1〜2件しかないので、トップページの3列グリッドをそのまま使うと
+   カードが左に寄って余白が目立つ。中央に寄せ、幅の上限だけ決める。 */
+.campaign-rooms__grid {
+  justify-content: center;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+/* ---------- 下部 CTA ---------- */
+
+.campaign-cta {
+  padding: 80px 0;
+  background-color: var(--color-primary-dark);
+  color: #fff;
+  text-align: center;
+}
+
+.campaign-cta__title {
+  font-size: 1.6rem;
+  margin-bottom: 12px;
+}
+
+.campaign-cta__text {
+  margin-bottom: 32px;
+  opacity: 0.9;
+}
+
+/* 上下の CTA を同じ大きさに揃える。押せる場所だと分かる面積を確保する。 */
+.campaign-cta__btn {
+  padding: 18px 56px;
+  font-size: 1.1rem;
+}
+
+.campaign-cta .campaign-cta__btn,
+.campaign-cta .campaign-cta__btn:hover {
+  background-color: #fff;
+  color: var(--color-primary-dark);
+}
+
+/* ---------- フッター ---------- */
+
+.campaign-footer {
+  padding: 32px 0;
+  background-color: var(--color-text);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.campaign-footer__terms {
+  max-width: 720px;
+  margin: 0 auto 12px;
+  line-height: 1.8;
+}
+
+@media (max-width: 600px) {
+  .campaign-points,
+  .campaign-rooms {
+    padding: 56px 0;
+  }
+
+  .campaign-cta__btn {
+    width: 100%;
+    padding: 18px 24px;
+  }
+}

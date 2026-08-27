@@ -3,7 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hotel ITS</title>
+  <title>Hotel ITS｜空に一番近い、やすらぎのひととき</title>
+  <meta name="description" content="都会の真ん中で過ごす、上質な滞在体験。シングル・ダブル・スイートの3タイプから、空室と料金をカレンダーで確かめてそのままご予約いただけます。" />
+
+  <!--
+    SNS やメッセージアプリに URL を貼ったときのカード表示。
+    og:image は絶対 URL でなければ読まれないので、公開ドメインが決まったら
+    https://example.com の部分を差し替えること（相対パスでは表示されない）。
+  -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Hotel ITS" />
+  <meta property="og:title" content="Hotel ITS｜空に一番近い、やすらぎのひととき" />
+  <meta property="og:description" content="都会の真ん中で過ごす、上質な滞在体験。空室と料金をカレンダーで確かめて、そのままご予約いただけます。" />
+  <meta property="og:url" content="https://example.com/" />
+  <meta property="og:image" content="https://example.com/images/ogp.jpg" />
+  <meta property="og:locale" content="ja_JP" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Hotel ITS｜空に一番近い、やすらぎのひととき" />
+  <meta name="twitter:description" content="都会の真ん中で過ごす、上質な滞在体験。空室と料金をカレンダーで確かめて、そのままご予約いただけます。" />
+  <meta name="twitter:image" content="https://example.com/images/ogp.jpg" />
 </head>
 <body>
   <header class="header">
@@ -80,133 +99,11 @@
     </section>
   </main>
 
-  <!-- 客室詳細モーダル -->
-  <div class="modal" id="room-modal" hidden>
-    <div class="modal__overlay" data-modal-close></div>
-    <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="modal-name">
-      <button type="button" class="modal__close" data-modal-close aria-label="閉じる">&times;</button>
-      <div class="modal__media" id="modal-media">
-        <img class="modal__img" id="modal-img" src="" alt="" />
-      </div>
-      <div class="modal__body">
-        <!-- ① 客室詳細＋日付選択ビュー -->
-        <div class="modal__view" data-view="detail">
-          <h3 class="modal__name" id="modal-name"></h3>
-          <p class="modal__price" id="modal-price"></p>
-          <p class="modal__desc" id="modal-desc"></p>
-
-          <div class="booking">
-            <!-- 月間料金カレンダーのマウント先（JS が中身を作る） -->
-            <div class="booking__calendar" id="calendar-mount"></div>
-
-            <!-- カレンダーで選んだ日付の表示欄 -->
-            <p class="booking__dates" id="booking-dates">日付を選択してください</p>
-
-            <!--
-              日付の入力欄はカレンダーに置き換えたが、値の保持役として残す。
-              予約フォームへの受け渡しと送信ペイロードがこの value を参照しているため、
-              削除せず CSS（booking__fields--hidden）で隠している。
-            -->
-            <div class="booking__fields booking__fields--hidden">
-              <div class="booking__field">
-                <label for="checkin" class="booking__label">チェックイン</label>
-                <input type="date" id="checkin" class="booking__input" />
-              </div>
-              <div class="booking__field">
-                <label for="checkout" class="booking__label">チェックアウト</label>
-                <input type="date" id="checkout" class="booking__input" />
-              </div>
-            </div>
-            <p class="booking__summary" id="booking-summary" hidden></p>
-
-            <!--
-              閲覧中に在庫が尽きたときの警告。JS（notifyInventoryChange）が出し入れする。
-              モーダルは閉じずにここで知らせる。閉じてしまうと、選んだ日付が
-              なぜ消えたのか利用者に分からないため。
-            -->
-            <div class="booking__alert" id="booking-alert" role="alert" hidden>
-              <p class="booking__alert-text">
-                ご覧いただいている間に満室となりました。別の日程か、他の客室をご検討ください。
-              </p>
-              <button type="button" class="booking__alert-link" data-browse-rooms>
-                他の客室を見る
-              </button>
-            </div>
-
-            <button type="button" class="btn btn--primary booking__reserve" id="booking-reserve" disabled>
-              予約する
-            </button>
-          </div>
-        </div>
-
-        <!-- ② 予約フォームビュー -->
-        <form class="modal__view reservation-form" data-view="form" hidden>
-          <button type="button" class="reservation-form__back" data-form-back>← 戻る</button>
-          <h3 class="reservation-form__title">予約情報の入力</h3>
-          <p class="reservation-form__summary" id="form-summary"></p>
-
-          <div class="field">
-            <label for="guestName" class="field__label">予約者名<span class="field__req">必須</span></label>
-            <input type="text" id="guestName" name="guestName" class="field__input" autocomplete="name" />
-            <span class="field__error" data-error-for="guestName"></span>
-          </div>
-
-          <div class="field">
-            <label for="email" class="field__label">メールアドレス<span class="field__req">必須</span></label>
-            <input type="email" id="email" name="email" class="field__input" autocomplete="email" />
-            <span class="field__error" data-error-for="email"></span>
-          </div>
-
-          <div class="field">
-            <label for="phone" class="field__label">電話番号<span class="field__opt">任意</span></label>
-            <input type="tel" id="phone" name="phone" class="field__input" autocomplete="tel" />
-            <span class="field__error" data-error-for="phone"></span>
-          </div>
-
-          <div class="field">
-            <label for="guests" class="field__label">宿泊人数<span class="field__req">必須</span></label>
-            <select id="guests" name="guests" class="field__input"></select>
-            <span class="field__error" data-error-for="guests"></span>
-          </div>
-
-          <div class="field">
-            <label for="notes" class="field__label">備考<span class="field__opt">任意</span></label>
-            <textarea id="notes" name="notes" class="field__input field__textarea" rows="3"></textarea>
-            <span class="field__error" data-error-for="notes"></span>
-          </div>
-
-          <!--
-            フォーム共通のエラー枠。満室の警告もここに出すため、
-            「他の客室を見る」導線を同じブロック内に置いてある（普段は hidden）。
-            エラー文言はサーバー由来の値も入るので、textContent で扱う #form-general-error と
-            リンクは要素を分けている。
-          -->
-          <div class="reservation-form__alert">
-            <p class="reservation-form__error" id="form-general-error" hidden></p>
-            <button type="button" class="reservation-form__browse" id="form-browse-rooms" data-browse-rooms hidden>
-              他の客室を見る
-            </button>
-          </div>
-
-          <button type="submit" class="btn btn--primary reservation-form__submit" id="form-submit">
-            この内容で予約する
-          </button>
-        </form>
-
-        <!-- ③ 予約完了ビュー -->
-        <div class="modal__view booking-complete" data-view="complete" hidden>
-          <div class="booking-complete__icon">✓</div>
-          <h3 class="booking-complete__title">ご予約が完了しました</h3>
-          <p class="booking-complete__label">予約番号</p>
-          <p class="booking-complete__order" id="complete-order"></p>
-          <p class="booking-complete__note">確認メールをお送りしました。予約番号は大切に保管してください。</p>
-          <button type="button" class="btn btn--primary booking-complete__close" data-modal-close>
-            閉じる
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!--
+    客室詳細モーダルはここには書かない。トップページとキャンペーン LP の両方で
+    同じものを使うため、マークアップは src/modal/roomModalTemplate.js に一本化し、
+    initRoomModal() が body へ差し込む（HTML を 2 ファイルに複製しないため）。
+  -->
 
   <footer class="footer">
     <div class="container">

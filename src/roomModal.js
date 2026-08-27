@@ -1,9 +1,21 @@
 import { resolveImageUrl } from './api/rooms';
 import { createReservation } from './api/reservations';
-import { todayStr, addDays, calcNights, calcTotal } from './booking';
+import { todayStr, addDays, calcNights } from './booking';
+import { calculatePrice } from './pricing/calculator.js';
+import { createPriceBreakdown } from './pricing/breakdownView.js';
+import { loadPricingRules } from './pricing/rulesStore.js';
+import {
+  toNightlyDisplayPrice,
+  nightlyPriceNote,
+  TOTAL_PRICE_NOTE,
+} from './pricing/displayPrice.js';
 import { createMonthCalendar } from './calendar/monthCalendar';
-import { formatYen } from './format';
+import { formatMoney } from './pricing/format.js';
 import { isBookable, readStock } from './inventory/stockLevel';
+import { ROOM_MODAL_HTML } from './modal/roomModalTemplate.js';
+import { track, toPriceBand, EVENTS } from './analytics/tracker.js';
+import { syncDeepLinkUrl } from './deeplink/urlSync.js';
+import { showToast } from './ui/toast.js';
 
 let currentRoom = null;
 let els = null;
@@ -19,6 +31,23 @@ let soldOut = false;
 // 送信中かどうか。在庫切れによる無効化と送信中の無効化が
 // 互いを打ち消さないよう、活性の判断をひとまとめにするために持つ。
 let submitting = false;
+// 料金ルール（税率・割引条件）。起動時に一度取得して使い回す。
+// 取得前は料金を出せないので、内訳は隠したままにする。
+let pricingRules = null;
+// 料金内訳ビュー。モーダルは1つなので使い回す。
+let breakdown = null;
+// 直近の計算結果。フォームビューの要約と、再計算せずに参照したい場面で使う。
+let lastBreakdown = null;
+// 「適用」を押して確定したクーポンコード。入力欄の値そのものではない。
+// 入力途中の文字列で金額が揺れないよう、確定した値だけを計算に渡す。
+let appliedCoupon = '';
+
+// ディープリンクで受け取った初期値（日付・人数・クーポン）。
+// モーダルは閉じるたびに状態を捨てる作りなので、URL 由来の値を
+// 「開くたびに適用する既定値」としてモジュール側に置いておく。
+// 利用者が通知バーで取り消したら null に戻す。
+let deepLinkDefaults = null;
+
 // OUT_OF_STOCK 後に自動で閉じるためのタイマー。
 // 持っておかないと、1.8 秒以内に別の部屋を開いたとき、
 // 開いたばかりのモーダルをこのタイマーが閉じてしまう。
@@ -62,8 +91,8 @@ function applySoldOutState() {
 
   if (currentView === 'detail') {
     els.bookingAlert.hidden = !soldOut;
-    // 予約ボタンの活性は updateSummary が一手に引き受けているので、そちらに任せる。
-    updateSummary();
+    // 予約ボタンの活性は updatePricing が一手に引き受けているので、そちらに任せる。
+    updatePricing();
     return;
   }
 
@@ -92,23 +121,125 @@ function applySoldOutState() {
 
 /* ---------- 詳細ビュー：日付選択・料金計算 ---------- */
 
-function updateSummary() {
-  const { checkin, checkout, summary, reserveBtn } = els;
-  const nights = calcNights(checkin.value, checkout.value);
+/**
+ * 宿泊人数の値を1か所に集める。
+ *
+ * 保持役はフォーム側の #guests ひとつだけと決めている。送信ペイロードも
+ * バリデーションもすでにこの select を読んでいるため、保持役を別に立てると
+ * 参照先が二重になり「どちらが最新か」を呼び出し順で決めることになる。
+ * 詳細ビューの select は、この値を映すだけの入力口として扱う。
+ *
+ * @param {string|number} [value] 設定する人数。省略時は現在値の読み出しのみ
+ * @returns {number} 確定した人数
+ */
+function syncGuests(value) {
+  if (value !== undefined) {
+    els.form.guests.value = String(value);
+  }
+  // 詳細ビューの select は常に保持役へ合わせる（片方向に流すので循環しない）。
+  els.bookingGuests.value = els.form.guests.value;
+  return Number(els.form.guests.value) || 1;
+}
 
-  if (nights <= 0 || !currentRoom) {
-    summary.hidden = true;
-    summary.textContent = '';
+/** 人数の選択肢を capacity を上限に生成する。2 つの select に同じものを入れる。 */
+function renderGuestOptions(room) {
+  [els.bookingGuests, els.guests].forEach((select) => {
+    select.innerHTML = '';
+    for (let n = 1; n <= room.capacity; n += 1) {
+      const opt = document.createElement('option');
+      opt.value = String(n);
+      opt.textContent = `${n}名`;
+      select.appendChild(opt);
+    }
+  });
+}
+
+/**
+ * 料金を計算し直して画面に反映する。
+ * 日付確定・人数変更・クーポン適用の 3 つの入口から、必ずここを通す。
+ */
+function updatePricing() {
+  const { checkin, checkout, reserveBtn } = els;
+
+  // 部屋もルールも揃っていなければ計算しない（起動直後・閉じている間）。
+  if (!currentRoom || !pricingRules) {
+    lastBreakdown = null;
+    breakdown.clear();
     reserveBtn.disabled = true;
     return;
   }
 
-  const total = calcTotal(currentRoom.price, nights);
-  summary.textContent = `${nights}泊 / 合計 ${formatYen(total)}`;
-  summary.hidden = false;
+  const guests = syncGuests();
+  const nights = calcNights(checkin.value, checkout.value);
+
+  // 日別単価はカレンダーが持っている。ここで渡さないと、カレンダーのセルに
+  // 出ている曜日ごとの金額と内訳の合計が食い違う（既定単価で計算されるため）。
+  const nightlyRates = calendar ? calendar.getNightlyRates(checkin.value, nights) : null;
+
+  const result = calculatePrice({
+    room: currentRoom,
+    nightlyRates,
+    checkIn: checkin.value,
+    checkOut: checkout.value,
+    guests,
+    couponCode: appliedCoupon,
+    rules: pricingRules,
+    // 現在時刻は calculatePrice の外で決める（純粋関数のまま保つため）。
+    today: todayStr(),
+  });
+
+  lastBreakdown = result.error ? null : result;
+  breakdown.update(result, guests);
+
   // 日付が揃っていても、在庫切れの間は先へ進ませない。
-  // 日付を選び直すたびにここを通るので、無効化が上書きで解除されることもない。
-  reserveBtn.disabled = soldOut;
+  // 人数やクーポンを変えるたびにここを通るので、無効化が上書きで解除されることもない。
+  reserveBtn.disabled = soldOut || Boolean(result.error);
+}
+
+/**
+ * クーポンの「適用」。押した時点の入力値を確定させ、再計算する。
+ * 効いたかどうかは計算結果から判断する（コードの正否をここで判定しない）。
+ */
+function applyCoupon() {
+  // 入力欄の見た目を整えるための正規化。判定そのものは calculatePrice が
+  // 内部で同じ正規化をしてから行うので、ここでの整形は表示上の親切に過ぎない。
+  appliedCoupon = els.couponCode.value.trim().toUpperCase();
+  els.couponCode.value = appliedCoupon;
+  updatePricing();
+  syncUrl();
+
+  const applied = lastBreakdown && lastBreakdown.appliedDiscount;
+
+  if (!appliedCoupon) {
+    els.couponMsg.hidden = true;
+    return;
+  }
+  if (applied && applied.code === appliedCoupon) {
+    els.couponMsg.textContent = `${applied.label}を適用しました。`;
+    track(EVENTS.COUPON_APPLIED, {
+      code: appliedCoupon,
+      roomId: currentRoom ? Number(currentRoom.id) : null,
+      priceBand: lastBreakdown ? toPriceBand(lastBreakdown.total) : null,
+    });
+  } else if (applied) {
+    // 併用不可なので、より値引き額の大きい割引が既に効いている場合はそちらが残る。
+    els.couponMsg.textContent = `${applied.label}の方が割引額が大きいため、そちらを適用しています。`;
+    // 別の割引に負けた場合も「そのコードは効かなかった」ことに変わりはない。
+    // どのコードが期待外れだったかは配信側が知る必要がある。
+    track(EVENTS.COUPON_REJECTED, {
+      code: appliedCoupon,
+      reason: 'superseded',
+      roomId: currentRoom ? Number(currentRoom.id) : null,
+    });
+  } else {
+    els.couponMsg.textContent = 'このクーポンコードはご利用いただけません。';
+    track(EVENTS.COUPON_REJECTED, {
+      code: appliedCoupon,
+      reason: 'invalid',
+      roomId: currentRoom ? Number(currentRoom.id) : null,
+    });
+  }
+  els.couponMsg.hidden = false;
 }
 
 function onCheckinChange() {
@@ -120,14 +251,14 @@ function onCheckinChange() {
       checkout.value = '';
     }
   }
-  updateSummary();
+  updatePricing();
 }
 
 /**
  * カレンダーで日付が確定／解除されたときに呼ばれる。
  *
  * 隠してある input[type=date] が引き続き値の保持役なので、
- * ここで value を書き戻してから updateSummary() を呼ぶ。
+ * ここで value を書き戻してから updatePricing() を呼ぶ。
  * value の代入では change イベントが発火せず onCheckinChange は動かないため、
  * 料金の再計算はこの明示的な呼び出しに任せる。
  *
@@ -146,7 +277,69 @@ function onCalendarSelect(range) {
     dates.textContent = `${range.checkIn} 〜 ${range.checkOut}（${range.nights}泊）`;
   }
 
-  updateSummary();
+  updatePricing();
+  syncUrl();
+
+  // 解除は送らない。選び直しの途中で必ず一度 null が来るので、
+  // 送ると「選択をやめた」ように見えるイベントが選択のたびに混ざる。
+  if (range) {
+    track(EVENTS.DATES_SELECTED, {
+      roomId: currentRoom ? Number(currentRoom.id) : null,
+      nights: range.nights,
+      guests: Number(els.form.guests.value) || null,
+      // 何日先の予約かは分析に使うが、日付そのものは客室・人数と
+      // 組み合わせると予約 1 件を指せてしまうので送らない。
+      leadDays: calcNights(todayStr(), range.checkIn),
+      priceBand: lastBreakdown ? toPriceBand(lastBreakdown.total) : null,
+    });
+  }
+}
+
+/* ---------- URL への反映 ---------- */
+
+/**
+ * いま画面に出ている条件を URL に書き戻す。
+ *
+ * 日付確定・人数変更・クーポン適用の 3 つの入口から呼ぶ。updatePricing と
+ * 同じ場所から呼ぶことで、「金額が変わったのに URL が古いまま」が起きない。
+ */
+function syncUrl() {
+  if (!currentRoom || !els) return;
+
+  syncDeepLinkUrl({
+    room: Number(currentRoom.id),
+    // 日付は確定している（checkOut まで埋まっている）ときだけ載せる。
+    // 片側だけの URL は parseDeepLink 側で捨てられるので出す意味がない。
+    checkIn: els.checkin.value || null,
+    checkOut: els.checkout.value || null,
+    guests: Number(els.form.guests.value) || null,
+    promo: appliedCoupon || null,
+  });
+}
+
+/**
+ * いまの条件の URL をクリップボードへコピーする。
+ *
+ * URL は条件が変わるたびに書き換えてあるので、組み立て直さず location.href を渡す。
+ * ここで作り直すと「画面の URL」と「共有した URL」が食い違う余地ができる。
+ */
+async function shareCurrentUrl() {
+  // 押した時点の URL を確実にするため、一度書き戻してから読む。
+  syncUrl();
+
+  try {
+    // clipboard API は https（と localhost）でしか使えず、権限も拒否され得る。
+    // 使えない環境では例外になるので、成否は必ず利用者に返す。
+    if (!navigator.clipboard) throw new Error('clipboard API unavailable');
+    await navigator.clipboard.writeText(window.location.href);
+    showToast('この条件のURLをコピーしました');
+  } catch (err) {
+    showToast('コピーできませんでした。URLバーからコピーしてください', {
+      type: 'error',
+    });
+    // eslint-disable-next-line no-console
+    console.warn(err);
+  }
 }
 
 /* ---------- フォームビュー ---------- */
@@ -208,25 +401,27 @@ function validateClient(values) {
   return ok;
 }
 
-// 詳細 → フォームへ遷移。日付サマリを表示し、人数 select を capacity で生成
+// 詳細 → フォームへ遷移。日付と金額の要約を出す。
+// 人数 select は詳細ビューと共有しており openRoomModal で作り済みなので、ここでは触らない。
 function goToForm() {
   const nights = calcNights(els.checkin.value, els.checkout.value);
-  const total = calcTotal(currentRoom.price, nights);
+  const totalText = lastBreakdown
+    ? `合計 ${formatMoney(lastBreakdown.total)}（${TOTAL_PRICE_NOTE}）`
+    : '';
   els.formSummary.textContent =
     `${currentRoom.name}｜${els.checkin.value} 〜 ${els.checkout.value}` +
-    `（${nights}泊 / 合計 ${formatYen(total)}）`;
-
-  // 宿泊人数の選択肢を room.capacity を上限として生成
-  els.guests.innerHTML = '';
-  for (let n = 1; n <= currentRoom.capacity; n += 1) {
-    const opt = document.createElement('option');
-    opt.value = String(n);
-    opt.textContent = `${n}名`;
-    els.guests.appendChild(opt);
-  }
+    `（${nights}泊 / ${totalText}）`;
 
   clearErrors();
   setView('form');
+
+  track(EVENTS.FORM_REACHED, {
+    roomId: Number(currentRoom.id),
+    nights,
+    guests: Number(els.form.guests.value) || null,
+    priceBand: lastBreakdown ? toPriceBand(lastBreakdown.total) : null,
+    coupon: appliedCoupon || null,
+  });
 }
 
 async function handleSubmit(e) {
@@ -248,10 +443,15 @@ async function handleSubmit(e) {
 
   if (!validateClient(values)) return;
 
-  // 送信ペイロード。roomTypeId / guests は必ず数値に変換。料金は送らない。
+  // 送信ペイロード。roomTypeId / guests は必ず数値に変換。
+  // 料金は送らない。画面の計算はあくまで見積もりで、税率も割引も変わり得るため、
+  // 請求額はサーバーが同じルールで計算し直した値を唯一の正とする。
+  // クライアントが金額を送れる作りにすると、改ざんされた金額で予約が通る余地も残る。
   const payload = {
     roomTypeId: Number(currentRoom.id),
     guests: Number(values.guests),
+    // 金額ではなく「どのクーポンを使ったか」だけを渡す。割引の適用可否はサーバーが決める。
+    couponCode: appliedCoupon,
     checkIn: els.checkin.value,
     checkOut: els.checkout.value,
     guestName: values.guestName.trim(),
@@ -271,6 +471,17 @@ async function handleSubmit(e) {
       // 成功：予約番号を完了画面に表示
       els.completeOrder.textContent = res.data.orderNumber;
       setView('complete');
+
+      // 予約番号は送らない。それ 1 つで予約と利用者を名指しでき、
+      // 計測側に渡った時点で「誰がいつ何を予約したか」の索引になる。
+      // 成約の分析に要るのは件数と条件の分布であって、個別の予約ではない。
+      track(EVENTS.RESERVATION_COMPLETED, {
+        roomId: Number(currentRoom.id),
+        nights: calcNights(els.checkin.value, els.checkout.value),
+        guests: Number(values.guests) || null,
+        priceBand: lastBreakdown ? toPriceBand(lastBreakdown.total) : null,
+        coupon: appliedCoupon || null,
+      });
       return;
     }
 
@@ -316,6 +527,20 @@ function clearAutoClose() {
   }
 }
 
+/**
+ * ディープリンク由来の初期値を設定する。
+ *
+ * ここで保持するのは「次にモーダルを開いたときに適用する値」であって、
+ * いま画面に出ている状態ではない。予約フォームまで進んだ後の再オープンや、
+ * 一覧から別の部屋を開いた場合にも同じ初期値が効く。
+ *
+ * @param {?{checkIn: ?string, checkOut: ?string, guests: ?number, promo: ?string}} defaults
+ *   null を渡すと解除（通知バーの「取り消す」から呼ばれる）
+ */
+export function setDeepLinkDefaults(defaults) {
+  deepLinkDefaults = defaults || null;
+}
+
 export function openRoomModal(room) {
   if (!els) return;
   currentRoom = room;
@@ -325,32 +550,64 @@ export function openRoomModal(room) {
   clearAutoClose();
 
   // 前回開いた部屋の在庫切れ状態を持ち越さない。
-  // updateSummary より先に落としておかないと、予約ボタンが無効のまま開く。
+  // updatePricing より先に落としておかないと、予約ボタンが無効のまま開く。
   soldOut = !isBookable(room.stock);
   submitting = false;
 
   els.img.src = resolveImageUrl(room.imagePath);
   els.img.alt = room.name;
   els.name.textContent = room.name;
-  els.price.innerHTML = `${formatYen(room.price)}<span>/泊</span>`;
+  // 見出しの単価もカード・カレンダーと同じ基準（税込・宿泊税別）で出す。
+  els.price.innerHTML =
+    `${formatMoney(toNightlyDisplayPrice(room.price, pricingRules))}<span>/泊</span>` +
+    `<small class="modal__tax-note">${nightlyPriceNote(pricingRules)}</small>`;
   els.desc.textContent = room.description;
 
   // 月間料金カレンダー。部屋ごとに料金が違うので、開くたびに作り直す。
   // 前回のものが残っていれば先に破棄してから差し込む。
+  // ディープリンクの日付は、カレンダーの初期選択と初期表示月の両方に渡す。
+  // 選択だけ渡して表示月を渡さないと、今月のマス目に「どこにも無い選択」が
+  // 塗られた状態で開くことになる。
+  const linkDates =
+    deepLinkDefaults && deepLinkDefaults.checkIn && deepLinkDefaults.checkOut
+      ? { checkIn: deepLinkDefaults.checkIn, checkOut: deepLinkDefaults.checkOut }
+      : null;
+
   if (calendar) calendar.destroy();
   calendar = createMonthCalendar({
     roomId: room.id,
     onSelect: onCalendarSelect,
+    initialRange: linkDates,
+    initialMonth: linkDates ? linkDates.checkIn.slice(0, 7) : null,
   });
   els.calendarMount.appendChild(calendar.el);
   els.dates.textContent = NO_DATES_TEXT;
+
+  // 人数の選択肢は部屋ごとに上限が違うので、開くたびに作り直す。
+  renderGuestOptions(room);
+  // ディープリンクの人数は定員を超えていたら使わない。
+  // 定員に丸めると、URL で指定したはずの人数と違う金額を黙って出すことになる。
+  const linkGuests =
+    deepLinkDefaults &&
+    deepLinkDefaults.guests &&
+    deepLinkDefaults.guests <= room.capacity
+      ? deepLinkDefaults.guests
+      : null;
+  syncGuests(linkGuests || Math.min(2, room.capacity));
+
+  // クーポンは部屋をまたいで持ち越さない。
+  // ただしディープリンクの promo は「開くたびに適用する既定値」なので、
+  // 部屋を変えても効き続ける（取り消されるまで）。
+  appliedCoupon = (deepLinkDefaults && deepLinkDefaults.promo) || '';
+  els.couponCode.value = appliedCoupon;
+  els.couponMsg.hidden = true;
 
   const today = todayStr();
   els.checkin.min = today;
   els.checkin.value = '';
   els.checkout.min = addDays(today, 1);
   els.checkout.value = '';
-  updateSummary();
+  updatePricing();
 
   els.form.reset();
   clearErrors();
@@ -358,6 +615,25 @@ export function openRoomModal(room) {
 
   els.modal.hidden = false;
   document.body.style.overflow = 'hidden';
+
+  // 開いた時点で客室を URL に載せる。
+  // ただしディープリンクの日付を持って開いた場合は、ここでは触らない。
+  // この時点の入力欄はまだ空なので、書き戻すと URL の日付を一度消してしまい、
+  // カレンダーの検証が終わるまでの間に再読み込みされると日付が失われる。
+  // 検証を通れば onCalendarSelect 経由で、落ちれば同じく null 経由で反映される。
+  if (!linkDates) syncUrl();
+
+  track(EVENTS.ROOM_VIEW, {
+    roomId: Number(room.id),
+    // 単価も帯で送る。客室ごとの実額はモックでも本番でも公開情報だが、
+    // 送る金額の粒度をイベントごとに変えると集計側で混ざる。
+    priceBand: toPriceBand(room.price),
+    stock: readStock(room.stock),
+    // ディープリンクの初期値が効いている状態で開いたか。
+    // 「自動で開いた」ではない（取り消されるまでは、一覧から手で開いても真になる）。
+    // 名前を auto にすると集計側が自動オープン数と読み違える。
+    deepLinkActive: Boolean(deepLinkDefaults),
+  });
 }
 
 export function closeRoomModal() {
@@ -365,8 +641,16 @@ export function closeRoomModal() {
   clearAutoClose();
   els.modal.hidden = true;
   document.body.style.overflow = '';
+
+  // 予約条件だけを URL から外す。計測パラメータと言語は残す
+  // （閉じただけで流入元が消えると、以降の行動が計測から切れる）。
+  syncDeepLinkUrl(null);
+
   currentRoom = null;
   soldOut = false;
+  lastBreakdown = null;
+  appliedCoupon = '';
+  breakdown.clear();
 
   // カレンダーは開くたびに作り直すので、閉じる時点で破棄する
   if (calendar) {
@@ -421,8 +705,31 @@ export function notifyInventoryChange(item) {
  * @param {Object} [opts]
  * @param {Function} [opts.onStockChange] OUT_OF_STOCK 時に一覧を再取得するコールバック
  */
+/**
+ * モーダルの器を用意する。すでにページ内にあればそれを使い、
+ * 無ければテンプレートから生成して body の末尾に差す。
+ *
+ * 既存要素を優先するのは、将来どこかのページが独自の位置にモーダルを
+ * 置きたくなった場合に、この関数を書き換えずに済ませるため。
+ *
+ * @returns {?HTMLElement}
+ */
+function mountModal() {
+  const existing = document.getElementById('room-modal');
+  if (existing) return existing;
+
+  // テンプレートは要素 1 つ分なので、仮の親に流し込んで最初の要素だけ取り出す。
+  const host = document.createElement('div');
+  host.innerHTML = ROOM_MODAL_HTML.trim();
+  const modal = host.firstElementChild;
+  if (!modal) return null;
+
+  document.body.appendChild(modal);
+  return modal;
+}
+
 export function initRoomModal(opts = {}) {
-  const modal = document.getElementById('room-modal');
+  const modal = mountModal();
   if (!modal) return;
 
   onStockChange = opts.onStockChange || null;
@@ -440,9 +747,14 @@ export function initRoomModal(opts = {}) {
     dates: document.getElementById('booking-dates'),
     checkin: document.getElementById('checkin'),
     checkout: document.getElementById('checkout'),
-    summary: document.getElementById('booking-summary'),
+    bookingGuests: document.getElementById('booking-guests'),
+    couponCode: document.getElementById('coupon-code'),
+    couponApply: document.getElementById('coupon-apply'),
+    couponMsg: document.getElementById('coupon-msg'),
+    breakdownMount: document.getElementById('breakdown-mount'),
     bookingAlert: document.getElementById('booking-alert'),
     reserveBtn: document.getElementById('booking-reserve'),
+    shareBtn: document.getElementById('booking-share'),
     form: document.querySelector('.reservation-form'),
     formSummary: document.getElementById('form-summary'),
     guests: document.getElementById('guests'),
@@ -465,9 +777,13 @@ export function initRoomModal(opts = {}) {
     if (e.key === 'Escape' && !modal.hidden) closeRoomModal();
   });
 
+  // 料金内訳はモーダルと同じ寿命なので、ここで一度だけ作って差し込む。
+  breakdown = createPriceBreakdown();
+  els.breakdownMount.appendChild(breakdown.el);
+
   // 日付入力
   els.checkin.addEventListener('change', onCheckinChange);
-  els.checkout.addEventListener('change', updateSummary);
+  els.checkout.addEventListener('change', updatePricing);
 
   // 再入力を始めた時点で、その項目のエラー表示をリセットする
   els.form.querySelectorAll('[name]').forEach((input) => {
@@ -477,8 +793,31 @@ export function initRoomModal(opts = {}) {
 
   // 詳細→フォーム、フォーム→詳細、送信
   els.reserveBtn.addEventListener('click', goToForm);
+  els.shareBtn.addEventListener('click', shareCurrentUrl);
   els.form
     .querySelector('[data-form-back]')
     .addEventListener('click', () => setView('detail'));
   els.form.addEventListener('submit', handleSubmit);
+
+  // 人数変更。どちらの select から入力されても、保持役へ書いてから再計算する。
+  els.bookingGuests.addEventListener('change', () => {
+    syncGuests(els.bookingGuests.value);
+    updatePricing();
+    syncUrl();
+  });
+  els.guests.addEventListener('change', () => {
+    syncGuests(els.guests.value);
+    updatePricing();
+    syncUrl();
+  });
+
+  // クーポンは「適用」を押したときだけ効かせる。
+  els.couponApply.addEventListener('click', applyCoupon);
+
+  // 料金ルールの取得。一覧カードやカレンダーと同じ1件を共有する（rulesStore）。
+  // 取れるまで料金は出せないので、届いた時点で計算し直す。
+  loadPricingRules().then((rules) => {
+    pricingRules = rules;
+    if (!els.modal.hidden) updatePricing();
+  });
 }

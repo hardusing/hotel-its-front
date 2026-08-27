@@ -49,10 +49,3 @@ export function calcNights(checkin, checkout) {
   const nights = Math.round((outMs - inMs) / MS_PER_DAY);
   return nights > 0 ? nights : 0;
 }
-
-/**
- * 合計金額を計算する。
- */
-export function calcTotal(price, nights) {
-  return price * nights;
-}
