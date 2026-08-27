@@ -37,6 +37,14 @@
       <div class="container">
         <h2 class="section__title" data-i18n="rooms.title">客室紹介</h2>
         <p class="section__lead" data-i18n="rooms.lead">用途に合わせてお選びいただける、3つの客室タイプ。</p>
+
+        <!--
+          在庫を最後に取得できた時刻。JS（lastUpdated.js）が出し入れする。
+          在庫は数十秒遅れの値なので、いつ時点のものかを添えないと
+          画面の数字がどれくらい信用できるのか利用者に判断できない。
+        -->
+        <p class="rooms__updated" id="rooms-updated" role="status" hidden></p>
+
         <div class="rooms__grid" id="rooms-grid">
           <!-- 客室カードは JS が API から取得して描画する -->
         </div>
@@ -110,6 +118,21 @@
               </div>
             </div>
             <p class="booking__summary" id="booking-summary" hidden></p>
+
+            <!--
+              閲覧中に在庫が尽きたときの警告。JS（notifyInventoryChange）が出し入れする。
+              モーダルは閉じずにここで知らせる。閉じてしまうと、選んだ日付が
+              なぜ消えたのか利用者に分からないため。
+            -->
+            <div class="booking__alert" id="booking-alert" role="alert" hidden>
+              <p class="booking__alert-text">
+                ご覧いただいている間に満室となりました。別の日程か、他の客室をご検討ください。
+              </p>
+              <button type="button" class="booking__alert-link" data-browse-rooms>
+                他の客室を見る
+              </button>
+            </div>
+
             <button type="button" class="btn btn--primary booking__reserve" id="booking-reserve" disabled>
               予約する
             </button>
@@ -152,7 +175,18 @@
             <span class="field__error" data-error-for="notes"></span>
           </div>
 
-          <p class="reservation-form__error" id="form-general-error" hidden></p>
+          <!--
+            フォーム共通のエラー枠。満室の警告もここに出すため、
+            「他の客室を見る」導線を同じブロック内に置いてある（普段は hidden）。
+            エラー文言はサーバー由来の値も入るので、textContent で扱う #form-general-error と
+            リンクは要素を分けている。
+          -->
+          <div class="reservation-form__alert">
+            <p class="reservation-form__error" id="form-general-error" hidden></p>
+            <button type="button" class="reservation-form__browse" id="form-browse-rooms" data-browse-rooms hidden>
+              他の客室を見る
+            </button>
+          </div>
 
           <button type="submit" class="btn btn--primary reservation-form__submit" id="form-submit">
             この内容で予約する

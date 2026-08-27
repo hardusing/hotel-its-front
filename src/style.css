@@ -9,6 +9,13 @@
   --color-price-low: #2f8f5b;
   --color-price-mid: #b7791f;
   --color-price-high: #c05621;
+  /* 在庫の逼迫度を示す色。満室バッジと残室表示で同じ色を使う */
+  --color-warn: #b7791f;
+  --color-danger: #d64545;
+  /* 在庫が動いた直後のハイライト色 */
+  --color-highlight: #fdf3d8;
+  /* 満室警告の下地 */
+  --color-danger-bg: #fdecec;
   --max-width: 1080px;
   --radius: 10px;
   --shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
@@ -288,7 +295,7 @@ a {
   right: 14px;
   padding: 6px 14px;
   border-radius: 999px;
-  background-color: #d64545;
+  background-color: var(--color-danger);
   color: #fff;
   font-size: 0.8rem;
   font-weight: 700;
@@ -336,6 +343,51 @@ a {
   margin-bottom: 24px;
 }
 
+/* 在庫の状態別表示。修飾子は stockLevel.js の getStockModifier が付ける。
+   逼迫しているものほど強く見せ、余裕があるものは主張させない。 */
+.room-card__stock--plenty {
+  color: var(--color-muted);
+}
+
+.room-card__stock--few {
+  color: var(--color-warn);
+  font-weight: 700;
+}
+
+.room-card__stock--last {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+/* 満室は画像側のバッジで既に伝わっているので、文字は控えめにする */
+.room-card__stock--soldout {
+  color: var(--color-muted);
+}
+
+/* 在庫が動いた直後だけ薄く光らせる。閲覧の邪魔にならないよう、
+   背景色だけを短く変化させ、余白や文字サイズには触れない（レイアウトを動かさない）。 */
+@keyframes stock-updated {
+  from {
+    background-color: var(--color-highlight);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.room-card__stock--updated {
+  animation: stock-updated 0.8s ease-out;
+  border-radius: 4px;
+}
+
+/* 動きを減らす設定の利用者には点滅させない。
+   animationend が来なくなるがクラスが残るだけで、見た目には影響しない。 */
+@media (prefers-reduced-motion: reduce) {
+  .room-card__stock--updated {
+    animation: none;
+  }
+}
+
 /* 予約ボタンはカード下端に揃える */
 .room-card__reserve {
   margin-top: auto;
@@ -352,6 +404,20 @@ a {
 .room-card--soldout .room-card__img {
   filter: grayscale(0.4);
   opacity: 0.85;
+}
+
+/* 在庫の最終更新時刻。見出しの補足なので、常に控えめに置く */
+.rooms__updated {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+/* 一定時間更新できていないときは、さらに薄くして
+   「いまの値ではないかもしれない」ことを見た目で示す */
+.rooms__updated--stale {
+  opacity: 0.5;
 }
 
 .rooms__error {
@@ -570,6 +636,41 @@ a {
   margin-bottom: 20px;
   background-color: var(--color-bg-alt);
   border-radius: 8px;
+}
+
+/* 閲覧中に満室になったときの警告。押しつけがましくならないよう、
+   予約ボタンの直前に静かに差し込む */
+.booking__alert {
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background-color: var(--color-danger-bg);
+  border-left: 3px solid var(--color-danger);
+  border-radius: 8px;
+}
+
+.booking__alert-text {
+  font-size: 0.9rem;
+  color: var(--color-danger);
+  margin-bottom: 8px;
+}
+
+/* 行き止まりにしないための導線。ボタンだがリンクとして見せる */
+.booking__alert-link,
+.reservation-form__browse {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.booking__alert-link:hover,
+.reservation-form__browse:hover {
+  color: var(--color-primary-dark);
 }
 
 .booking__reserve {
@@ -1028,12 +1129,17 @@ a {
   color: #d64545;
 }
 
+/* フォーム共通エラーと、満室時の導線をまとめた枠 */
+.reservation-form__alert {
+  margin-bottom: 16px;
+}
+
 .reservation-form__error {
   padding: 12px 14px;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   font-size: 0.9rem;
-  color: #d64545;
-  background-color: #fdeaea;
+  color: var(--color-danger);
+  background-color: var(--color-danger-bg);
   border-radius: 8px;
 }
 

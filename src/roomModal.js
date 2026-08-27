@@ -3,6 +3,7 @@ import { createReservation } from './api/reservations';
 import { todayStr, addDays, calcNights, calcTotal } from './booking';
 import { createMonthCalendar } from './calendar/monthCalendar';
 import { formatYen } from './format';
+import { isBookable, readStock } from './inventory/stockLevel';
 
 let currentRoom = null;
 let els = null;
@@ -10,18 +11,83 @@ let els = null;
 let onStockChange = null;
 // 月間料金カレンダーのインスタンス（開くたびに作り直す）
 let calendar = null;
+// いま表示しているビュー。在庫切れの知らせ方をビューごとに変えるために持つ。
+let currentView = 'detail';
+// 表示中の部屋が在庫切れになっているか。
+// ボタンの活性やエラー表示は、この 1 つの状態から毎回導出する。
+let soldOut = false;
+// 送信中かどうか。在庫切れによる無効化と送信中の無効化が
+// 互いを打ち消さないよう、活性の判断をひとまとめにするために持つ。
+let submitting = false;
+// OUT_OF_STOCK 後に自動で閉じるためのタイマー。
+// 持っておかないと、1.8 秒以内に別の部屋を開いたとき、
+// 開いたばかりのモーダルをこのタイマーが閉じてしまう。
+let autoCloseTimer = null;
 
 // 日付未選択のときに表示欄へ出す文言
 const NO_DATES_TEXT = '日付を選択してください';
 
+// フォームビューで満室になったときの文言。
+// 復帰時に「自分が出したメッセージか」を判別するため、定数として持つ。
+const SOLD_OUT_FORM_TEXT =
+  '手続き中に満室となりました。恐れ入りますが、別の日程か他の客室をご検討ください。';
+
 // ビュー（detail / form / complete）を切り替える
 function setView(view) {
+  currentView = view;
   els.views.forEach((el) => {
     el.hidden = el.dataset.view !== view;
   });
   // 画像は詳細ビューのみ表示
   els.media.hidden = view !== 'detail';
   els.dialog.scrollTop = 0;
+  // 満室のままビューを移動しても警告が引き継がれるようにする
+  // （フォームから「戻る」で詳細に戻った場合など）。
+  applySoldOutState();
+}
+
+/* ---------- 在庫切れの反映 ---------- */
+
+// 送信ボタンの活性をまとめて決める。
+// 送信中と在庫切れの 2 つの理由があり、片方の解除で
+// もう片方まで押せるようにならないよう、必ずここを通す。
+function updateSubmitDisabled() {
+  if (!els) return;
+  els.submitBtn.disabled = submitting || soldOut;
+}
+
+// いまの soldOut を、表示中のビューに合わせて画面へ反映する。
+function applySoldOutState() {
+  if (!els) return;
+
+  if (currentView === 'detail') {
+    els.bookingAlert.hidden = !soldOut;
+    // 予約ボタンの活性は updateSummary が一手に引き受けているので、そちらに任せる。
+    updateSummary();
+    return;
+  }
+
+  if (currentView === 'form') {
+    if (soldOut) {
+      // 入力欄には一切触れない。ここで reset や再描画をすると、
+      // 入力済みの内容が消えて利用者の手間が丸ごと失われる。
+      showGeneralError(SOLD_OUT_FORM_TEXT);
+      els.formBrowse.hidden = false;
+    } else if (els.generalError.textContent === SOLD_OUT_FORM_TEXT) {
+      // 自分が出した満室メッセージのときだけ消す。
+      // 無条件に消すと、同時に出ていた入力エラーまで拭ってしまう。
+      els.generalError.hidden = true;
+      els.generalError.textContent = '';
+      els.formBrowse.hidden = true;
+    } else {
+      els.formBrowse.hidden = true;
+    }
+    updateSubmitDisabled();
+    return;
+  }
+
+  // complete ビューでは何もしない。予約はすでに成立しており、
+  // その後の在庫の増減は完了した予約に影響しない。
 }
 
 /* ---------- 詳細ビュー：日付選択・料金計算 ---------- */
@@ -40,7 +106,9 @@ function updateSummary() {
   const total = calcTotal(currentRoom.price, nights);
   summary.textContent = `${nights}泊 / 合計 ${formatYen(total)}`;
   summary.hidden = false;
-  reserveBtn.disabled = false;
+  // 日付が揃っていても、在庫切れの間は先へ進ませない。
+  // 日付を選び直すたびにここを通るので、無効化が上書きで解除されることもない。
+  reserveBtn.disabled = soldOut;
 }
 
 function onCheckinChange() {
@@ -103,9 +171,13 @@ function clearFieldError(field) {
   const inputEl = els.form.querySelector(`[name="${field}"]`);
   if (errorEl) errorEl.textContent = '';
   if (inputEl) inputEl.classList.remove('field__input--error');
-  // フォーム共通エラーも再入力で消す
-  els.generalError.hidden = true;
-  els.generalError.textContent = '';
+  // フォーム共通エラーも再入力で消す。
+  // ただし満室の警告だけは残す。入力を続けるだけで消えてしまうと、
+  // 満室に気付かないまま最後まで入力させることになる。
+  if (!soldOut) {
+    els.generalError.hidden = true;
+    els.generalError.textContent = '';
+  }
 }
 
 // 特定フィールドにエラーメッセージを表示する
@@ -159,6 +231,11 @@ function goToForm() {
 
 async function handleSubmit(e) {
   e.preventDefault();
+
+  // 在庫切れ中は送信そのものを止める。ボタンは無効化してあるが、
+  // 入力欄での Enter など別経路の送信もここで塞ぐ。
+  if (soldOut) return;
+
   clearErrors();
 
   const values = {
@@ -183,7 +260,8 @@ async function handleSubmit(e) {
     notes: values.notes.trim(),
   };
 
-  els.submitBtn.disabled = true;
+  submitting = true;
+  updateSubmitDisabled();
   els.submitBtn.textContent = '送信中...';
 
   try {
@@ -204,10 +282,13 @@ async function handleSubmit(e) {
         showGeneralError(error.message || '入力内容をご確認ください。');
         break;
       case 'OUT_OF_STOCK':
-        // 満室：メッセージを表示し、一覧を更新してモーダルを閉じる
+        // 満室：メッセージを表示し、一覧を更新してモーダルを閉じる。
+        // 在庫のポーリング（notifyInventoryChange）を入れた後もこの分岐は残す。
+        // ポーリングはあくまで数十秒遅れの予測であり、在庫を確定できるのは
+        // 予約を実際に処理したサーバーの応答だけ ＝ こちらが最終的な真実。
         showGeneralError('満室です。ご希望のお部屋は満室になりました。一覧に戻ります。');
         if (onStockChange) onStockChange();
-        window.setTimeout(closeRoomModal, 1800);
+        autoCloseTimer = window.setTimeout(closeRoomModal, 1800);
         break;
       default:
         // その他：サーバーのメッセージをそのまま表示
@@ -218,16 +299,35 @@ async function handleSubmit(e) {
     // eslint-disable-next-line no-console
     console.error(err);
   } finally {
-    els.submitBtn.disabled = false;
+    submitting = false;
+    // 送信中に満室になっていた場合、ここで無条件に有効化すると
+    // 押せる送信ボタンが戻ってしまうので、両方の理由を見て決め直す。
+    updateSubmitDisabled();
     els.submitBtn.textContent = 'この内容で予約する';
   }
 }
 
 /* ---------- 開閉 ---------- */
 
+function clearAutoClose() {
+  if (autoCloseTimer !== null) {
+    window.clearTimeout(autoCloseTimer);
+    autoCloseTimer = null;
+  }
+}
+
 export function openRoomModal(room) {
   if (!els) return;
   currentRoom = room;
+
+  // 前回の自動クローズ待ちを打ち切る。残っていると、いま開いた部屋が
+  // 前回の満室応答を理由に閉じられる。
+  clearAutoClose();
+
+  // 前回開いた部屋の在庫切れ状態を持ち越さない。
+  // updateSummary より先に落としておかないと、予約ボタンが無効のまま開く。
+  soldOut = !isBookable(room.stock);
+  submitting = false;
 
   els.img.src = resolveImageUrl(room.imagePath);
   els.img.alt = room.name;
@@ -262,15 +362,58 @@ export function openRoomModal(room) {
 
 export function closeRoomModal() {
   if (!els) return;
+  clearAutoClose();
   els.modal.hidden = true;
   document.body.style.overflow = '';
   currentRoom = null;
+  soldOut = false;
 
   // カレンダーは開くたびに作り直すので、閉じる時点で破棄する
   if (calendar) {
     calendar.destroy();
     calendar = null;
   }
+}
+
+// 警告内の「他の客室を見る」導線。
+// 満室と伝えるだけで行き止まりにせず、次の行動をその場に用意する。
+function browseOtherRooms() {
+  closeRoomModal();
+  const rooms = document.getElementById('rooms');
+  if (rooms) rooms.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ---------- 在庫の変化を受け取る ---------- */
+
+/**
+ * 在庫スナップショットの 1 件を受け取り、表示中の部屋であれば画面に反映する。
+ * 反映の仕方は表示中のビューによって変える（applySoldOutState 参照）。
+ *
+ * @param {{id: number, stock: number}} item 在庫 1 件分
+ */
+export function notifyInventoryChange(item) {
+  // 閉じているモーダルには何もしない。開いた時点の在庫で openRoomModal が組み直す。
+  if (!els || els.modal.hidden || !currentRoom) return;
+  if (!item) return;
+
+  // 表示中の部屋以外は無関係。他室の増減で警告を出しては誤報になる。
+  if (Number(item.id) !== Number(currentRoom.id)) return;
+
+  // 壊れた値で予約を止めないよう、解釈できなければ無視する。
+  const stock = readStock(item.stock);
+  if (stock === null) return;
+
+  // currentRoom には書き込まない。room オブジェクトの在庫を更新するのは
+  // 一覧側（applyInventory）だけと決めてあり、ここで二重に書くと
+  // 呼ばれる順番によってどちらが最新か決まってしまう。
+  // このモーダルは受け取った item から自分の表示状態だけを導く。
+  const nextSoldOut = !isBookable(stock);
+  // 状態が変わらないなら画面に触れない。残室数の増減そのものは、
+  // 予約できるかどうかを左右しない限り利用者に知らせる必要がない。
+  if (nextSoldOut === soldOut) return;
+
+  soldOut = nextSoldOut;
+  applySoldOutState();
 }
 
 /**
@@ -298,11 +441,13 @@ export function initRoomModal(opts = {}) {
     checkin: document.getElementById('checkin'),
     checkout: document.getElementById('checkout'),
     summary: document.getElementById('booking-summary'),
+    bookingAlert: document.getElementById('booking-alert'),
     reserveBtn: document.getElementById('booking-reserve'),
     form: document.querySelector('.reservation-form'),
     formSummary: document.getElementById('form-summary'),
     guests: document.getElementById('guests'),
     generalError: document.getElementById('form-general-error'),
+    formBrowse: document.getElementById('form-browse-rooms'),
     submitBtn: document.getElementById('form-submit'),
     completeOrder: document.getElementById('complete-order'),
   };
@@ -310,6 +455,11 @@ export function initRoomModal(opts = {}) {
   // 閉じる（×・オーバーレイ・完了画面の閉じるボタン）
   modal.querySelectorAll('[data-modal-close]').forEach((el) => {
     el.addEventListener('click', closeRoomModal);
+  });
+
+  // 満室の警告に置いた「他の客室を見る」導線（詳細ビュー・フォームビューの両方）
+  modal.querySelectorAll('[data-browse-rooms]').forEach((el) => {
+    el.addEventListener('click', browseOtherRooms);
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !modal.hidden) closeRoomModal();
