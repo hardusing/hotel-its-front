@@ -9,17 +9,26 @@
 
 import { fetchMonthlyRates } from '../api/calendar';
 import { todayStr, calcNights, addDays } from '../booking';
-import { formatMoney, formatMoneyShort } from '../pricing/format.js';
+import {
+  formatMoney,
+  formatMoneyShort,
+  formatDateLong,
+  formatMonth,
+  weekdayLabels,
+} from '../i18n/format.js';
 import { loadPricingRules, getPricingRules } from '../pricing/rulesStore.js';
 import { toNightlyDisplayPrice, nightlyPriceNote } from '../pricing/displayPrice.js';
+import { getStockLabel } from '../inventory/stockLevel';
 import {
   buildMonthGrid,
   shiftMonth,
   isSameOrAfter,
   eachDateBetween,
 } from './grid';
+import { t, onLocaleChange } from '../i18n/index.js';
 
-const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+// 曜日名・日付・年月の書式は i18n/format.js に任せる。weekday の 0=日 … 6=土 は
+// grid.js の決め（週の始まりは日曜）と、weekdayLabels の並びが一致している。
 
 // 満室・休館を含む期間を選んだときの警告を出しておく時間（ミリ秒）
 const WARNING_DURATION = 3000;
@@ -35,22 +44,32 @@ const WARNING_DURATION = 3000;
  * @returns {string} 例: "2026年8月28日 金曜日 14,720円 空室あり 残り5室"
  */
 function buildDayLabel(cell, rate, isPast) {
-  const [y, m, d] = cell.date.split('-').map(Number);
-  const parts = [`${y}年${m}月${d}日`, `${WEEKDAY_LABELS[cell.weekday]}曜日`];
+  // 日付と曜日は Intl に任せる。曜日名は long（「金曜日」/ "Friday"）で、
+  // 読み上げたときに略語にならないようにする。
+  const parts = [formatDateLong(cell.date), weekdayLabels('long')[cell.weekday]];
 
   if (!cell.inMonth) {
-    parts.push('表示中の月以外');
+    parts.push(t('calendar.day.outside'));
   } else if (!rate) {
-    parts.push('料金未取得');
+    parts.push(t('calendar.day.noRate'));
   } else if (rate.closed) {
-    parts.push('休館日');
+    parts.push(t('calendar.day.closed'));
   } else if (!rate.available) {
-    parts.push(formatMoney(toNightlyDisplayPrice(rate.price, getPricingRules())), '満室');
+    parts.push(
+      formatMoney(toNightlyDisplayPrice(rate.price, getPricingRules())),
+      t('calendar.day.soldOut'),
+    );
   } else {
-    parts.push(formatMoney(toNightlyDisplayPrice(rate.price, getPricingRules())), '空室あり', `残り${rate.stock}室`);
+    parts.push(
+      formatMoney(toNightlyDisplayPrice(rate.price, getPricingRules())),
+      t('calendar.day.available'),
+      // 残室数の言い回しはカードと同じ辞書から引く。
+      // カレンダーだけ別の文にすると、同じ在庫が画面ごとに違う言葉になる。
+      getStockLabel(rate.stock),
+    );
   }
 
-  if (isPast) parts.push('受付終了');
+  if (isPast) parts.push(t('calendar.day.past'));
 
   return parts.join(' ');
 }
@@ -117,11 +136,11 @@ function createDayCell(cell, rate, today) {
   let short = '';
   if (cell.inMonth && rate) {
     if (rate.closed) {
-      full = '休';
-      short = '休';
+      full = t('calendar.closedShort');
+      short = full;
     } else if (!rate.available) {
-      full = '満';
-      short = '満';
+      full = t('calendar.soldOutShort');
+      short = full;
     } else {
       // セルに出すのは税込単価。色分けや選択の判定には税抜の rate.price を
       // 使い続ける（換算しても大小関係は変わらないので、判定側は触らない）。
@@ -226,21 +245,24 @@ export function createMonthCalendar({ roomId, onSelect, initialRange, initialMon
   let requestId = 0;
   let destroyed = false;
 
+  // いま本体に出しているもの。言語が変わったときに「同じ状態を新しい言語で
+  // 出し直す」ために持つ。持たずに rates の有無だけで判断すると、取得に
+  // 失敗している最中に言語を変えたときエラー表示が読み込み中に化け、
+  // 再試行ボタンごと消えてやり直せなくなる。
+  let bodyState = 'loading';
+
   // --- 骨組み ---------------------------------------------------------------
   // ヘッダと曜日行は作り直さず、月送りのたびに body だけを差し替える。
   const el = document.createElement('div');
   el.className = 'calendar';
+  // 曜日名は言語で変わるので、テンプレートには入れず後から書き込む。
   el.innerHTML = `
     <div class="calendar__header">
-      <button type="button" class="calendar__nav calendar__nav--prev" data-nav="prev" aria-label="前の月">‹</button>
+      <button type="button" class="calendar__nav calendar__nav--prev" data-nav="prev"></button>
       <span class="calendar__title" data-title></span>
-      <button type="button" class="calendar__nav calendar__nav--next" data-nav="next" aria-label="次の月">›</button>
+      <button type="button" class="calendar__nav calendar__nav--next" data-nav="next"></button>
     </div>
-    <div class="calendar__weekdays" aria-hidden="true">
-      ${WEEKDAY_LABELS.map(
-        (label) => `<span class="calendar__weekday">${label}</span>`
-      ).join('')}
-    </div>
+    <div class="calendar__weekdays" aria-hidden="true" data-weekdays></div>
     <div class="calendar__body" data-body></div>
     <p class="calendar__tax-note" data-tax-note></p>
   `;
@@ -248,13 +270,44 @@ export function createMonthCalendar({ roomId, onSelect, initialRange, initialMon
   const titleEl = el.querySelector('[data-title]');
   const bodyEl = el.querySelector('[data-body]');
   const prevBtn = el.querySelector('[data-nav="prev"]');
+  const nextBtn = el.querySelector('[data-nav="next"]');
+  const weekdaysEl = el.querySelector('[data-weekdays]');
   const taxNoteEl = el.querySelector('[data-tax-note]');
+
+  // ヘッダの固定要素（前月・次月ボタン、曜日行）を現在の言語で埋める。
+  // 月送りでは作り直さない部分なので、言語が変わったときだけ呼び直す。
+  function renderChrome() {
+    prevBtn.setAttribute('aria-label', t('calendar.prevMonth'));
+    prevBtn.textContent = '‹';
+    nextBtn.setAttribute('aria-label', t('calendar.nextMonth'));
+    nextBtn.textContent = '›';
+
+    weekdaysEl.textContent = '';
+    weekdayLabels('short').forEach((label) => {
+      const span = document.createElement('span');
+      span.className = 'calendar__weekday';
+      span.textContent = label;
+      weekdaysEl.appendChild(span);
+    });
+
+    // 注記はルールが届いて初めて確定する。まだなら空のままにして、
+    // loadPricingRules の then 側に任せる。
+    if (getPricingRules()) {
+      taxNoteEl.textContent = t('calendar.taxNote', {
+        note: nightlyPriceNote(getPricingRules()),
+      });
+    }
+  }
+
+  renderChrome();
 
   // 表示金額の基準（税込かどうか）はルールが届いて初めて確定するので、
   // 届いた時点で注記を出し、同時にセルを描き直して単価も税込に揃える。
   loadPricingRules().then(() => {
     if (destroyed) return;
-    taxNoteEl.textContent = `1泊あたり・${nightlyPriceNote(getPricingRules())}`;
+    taxNoteEl.textContent = t('calendar.taxNote', {
+      note: nightlyPriceNote(getPricingRules()),
+    });
     // 料金の取得より先にルールが届いた場合、まだ読み込み表示が出ている。
     // そこへ空のグリッドを描くと読み込み中だと分からなくなるので、
     // 料金が手元にあるときだけ描き直す（無ければ load 側の描画に任せる）。
@@ -266,7 +319,7 @@ export function createMonthCalendar({ roomId, onSelect, initialRange, initialMon
   // 月ヘッダの更新と、前月ボタンの活殺。
   // 過去の月は宿泊できないので、今月より前へは戻れないようにする。
   function renderHeader() {
-    titleEl.textContent = `${year}年${month}月`;
+    titleEl.textContent = formatMonth(year, month);
 
     // 前月が今月より前なら戻れない。
     // "YYYY-MM" はゼロ埋め済みなので、文字列比較がそのまま年月の前後比較になる
@@ -278,22 +331,43 @@ export function createMonthCalendar({ roomId, onSelect, initialRange, initialMon
 
   // 取得中の表示
   function renderLoading() {
-    bodyEl.innerHTML = `
-      <p class="calendar__loading">
-        <span class="calendar__spinner" aria-hidden="true"></span>
-        料金を読み込んでいます…
-      </p>
-    `;
+    bodyState = 'loading';
+    bodyEl.textContent = '';
+
+    const p = document.createElement('p');
+    p.className = 'calendar__loading';
+
+    const spinner = document.createElement('span');
+    spinner.className = 'calendar__spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+
+    // 文言は textContent で入れる（辞書の値を HTML として解釈させない）。
+    const text = document.createTextNode(t('calendar.loading'));
+
+    p.append(spinner, text);
+    bodyEl.appendChild(p);
   }
 
   // 取得失敗の表示。再試行ボタンから同じ月を取り直す。
   function renderError() {
-    bodyEl.innerHTML = `
-      <div class="calendar__error">
-        <p class="calendar__error-text">料金の取得に失敗しました。</p>
-        <button type="button" class="calendar__retry" data-retry>再試行</button>
-      </div>
-    `;
+    bodyState = 'error';
+    bodyEl.textContent = '';
+
+    const box = document.createElement('div');
+    box.className = 'calendar__error';
+
+    const text = document.createElement('p');
+    text.className = 'calendar__error-text';
+    text.textContent = t('calendar.error');
+
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'calendar__retry';
+    retry.dataset.retry = '';
+    retry.textContent = t('common.retry');
+
+    box.append(text, retry);
+    bodyEl.appendChild(box);
   }
 
   /**
@@ -382,12 +456,15 @@ export function createMonthCalendar({ roomId, onSelect, initialRange, initialMon
   // そのまま 1 週間の行になる。行は role="row" のために必要で、
   // display: contents で 7 列グリッドの並びには影響させない。
   function renderGrid() {
+    bodyState = 'grid';
     const cells = buildMonthGrid(year, month);
 
     const grid = document.createElement('div');
     grid.className = 'calendar__grid';
     grid.setAttribute('role', 'grid');
-    grid.setAttribute('aria-label', `${year}年${month}月の料金カレンダー`);
+    grid.setAttribute('aria-label', t('calendar.gridLabel', {
+      month: formatMonth(year, month),
+    }));
 
     for (let i = 0; i < cells.length; i += 7) {
       const row = document.createElement('div');
@@ -567,7 +644,7 @@ export function createMonthCalendar({ roomId, onSelect, initialRange, initialMon
     );
 
     if (blocked.length > 0) {
-      showWarning('満室・休館日をまたぐ期間は選択できません。別の日をお選びください。');
+      showWarning(t('calendar.blockedWarning'));
       // 確定はせず、チェックインだけ選んだ状態に戻す
       selection = { checkIn: selection.checkIn, checkOut: null };
       hoverDate = null;
@@ -712,6 +789,25 @@ export function createMonthCalendar({ roomId, onSelect, initialRange, initialMon
   el.addEventListener('mouseover', handleHover);
   el.addEventListener('mouseleave', handleLeave);
 
+  // 言語が変わったら描き直す。
+  //
+  // 購読はインスタンスごとに張り、destroy で必ず外す。カレンダーは
+  // モーダルを開くたびに作り直されるので、外し忘れると閉じたカレンダーの
+  // 描き直しが言語を変えるたびに走り続け、しかも DOM から外れた要素を
+  // 相手にするので誰にも見えないまま増えていく。
+  //
+  // 料金は取り直さない。金額は言語で変わらないし、手元の rates から
+  // 同じグリッドをそのまま描ける（通信のやり直しは利用者を待たせるだけ）。
+  const unsubscribeLocale = onLocaleChange(() => {
+    if (destroyed) return;
+    renderChrome();
+    renderHeader();
+    // いま出している状態をそのまま、新しい言語で出し直す。
+    if (bodyState === 'grid') renderGrid();
+    else if (bodyState === 'error') renderError();
+    else renderLoading();
+  });
+
   // 初回表示
   load();
 
@@ -750,6 +846,7 @@ export function createMonthCalendar({ roomId, onSelect, initialRange, initialMon
      */
     destroy() {
       destroyed = true;
+      unsubscribeLocale();
       el.removeEventListener('click', handleClick);
       el.removeEventListener('keydown', handleKeydown);
       el.removeEventListener('focusin', handleFocusIn);

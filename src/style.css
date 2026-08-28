@@ -27,6 +27,31 @@
   box-sizing: border-box;
 }
 
+/* 多言語での折り返しの方針。
+   同じ文でも言語によって長さが 2 倍近く変わる（この画面では英語の
+   「税・サービス料込 / 宿泊税別」が日本語の約 1.9 倍）。幅を固定して
+   合わせにいくと、いちばん長い言語に合わせた余白が他の言語で無駄になり、
+   それでも将来の言語には足りない。幅は決めず、縮める余地と折り返す許可を
+   与える方針にする。使う道具は 2 つだけ。
+
+     min-width: 0        … flex/grid の子は既定が min-width: auto で、
+                           中身より小さくならない。これを外さないと、
+                           長い文が入った要素が隣を押し出す。
+     overflow-wrap       … 単語の途中でも折る「最後の手段」を許可する。
+
+   word-break: break-all は使わない。あれは常に文字単位で折るので、
+   英語が "Reserv / ation" のように読めない切れ方をする。
+   overflow-wrap は他に折り場所が無いときだけ働くので、単語の境界が
+   優先されたままになる。
+
+   日本語と中国語はもともと文字単位で折れるため、これらの指定で
+   折り返し位置が悪くなることはない。ただし既定のままだと小書き仮名や
+   長音符が行頭に来ることがあるので、禁則処理を厳しめに指定しておく。 */
+body {
+  line-break: strict;
+  overflow-wrap: break-word;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -53,12 +78,17 @@ a {
 }
 
 /* Buttons */
+/* ボタンの文言は言語差がそのまま出る（「予約する」5 文字に対して
+   "Share these conditions" は 22 文字）。幅は決めず、器からはみ出す前に
+   折り返させる。padding は左右を狭い画面で詰める（下のメディアクエリ）。 */
 .btn {
   display: inline-block;
+  max-width: 100%;
   padding: 14px 36px;
   border-radius: 999px;
   font-weight: 600;
   font-size: 1rem;
+  overflow-wrap: anywhere;
   transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
@@ -82,30 +112,44 @@ a {
   border-bottom: 1px solid var(--color-border);
 }
 
+/* ロゴ・ナビ・言語切替の 3 つを横に並べる。言語が増えるとナビの語も
+   言語ボタンも伸びるので、入りきらなければ折り返させる。height を固定
+   していると折り返した 2 段目がはみ出すため、min-height にする。 */
 .header__inner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  height: 68px;
+  gap: 12px;
+  min-height: 68px;
+  padding: 8px 0;
 }
 
 .header__logo {
+  flex-shrink: 0;
   font-size: 1.4rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--color-primary);
 }
 
+/* 項目そのものは折らず、リストを折り返す。
+   「Reserve」が "Res / erve" と割れるより、行が 2 段になる方が読める。 */
 .nav__list {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 28px;
+  justify-content: center;
+  gap: 12px 28px;
+  min-width: 0;
   list-style: none;
 }
 
 .nav__link {
+  display: inline-block;
   font-size: 0.95rem;
   color: var(--color-text);
+  white-space: nowrap;
   transition: color 0.2s ease;
 }
 
@@ -126,8 +170,12 @@ a {
 }
 
 /* Language switch */
+/* 言語ボタンは言語の数だけ増える。ヘッダーが狭いときに真っ先に潰れる
+   位置なので、縮まないようにしておき、代わりに狭い画面では左右の余白を
+   詰める（下のメディアクエリ）。 */
 .lang-switch {
   display: inline-flex;
+  flex-shrink: 0;
   border: 1px solid var(--color-border);
   border-radius: 999px;
   overflow: hidden;
@@ -681,11 +729,14 @@ a {
   border-radius: 8px;
 }
 
+/* 合計と要約。要約は英語だと 60 文字を超える（"Incl. tax, service charge
+   & accommodation tax / 2 guests, 3 nights"）ので、折り返しを許す。 */
 .breakdown__summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: 4px 8px;
   padding: 14px;
   cursor: pointer;
   list-style: none;
@@ -714,6 +765,8 @@ a {
 }
 
 .breakdown__meta {
+  min-width: 0;
+  overflow-wrap: anywhere;
   flex: 1;
   font-size: 0.85rem;
   color: var(--color-text-muted, #667);
@@ -732,9 +785,15 @@ a {
   font-size: 0.9rem;
 }
 
+/* min-width: 0 が要。これが無いと flex の子は既定の min-width: auto で
+   中身より小さくならず、長いラベル（英語の「{amount} per guest per night
+   × {guests} × {nights}」は 50 文字）が金額を押し出して重なる。
+   金額側は flex-shrink: 0 で守ってあるので、縮む側をここで許可する。 */
 .breakdown__label {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .breakdown__note {
@@ -1145,6 +1204,20 @@ a {
 }
 
 @media (max-width: 380px) {
+  /* この幅ではヘッダーの 3 要素（ロゴ・ナビ・言語ボタン）が確実に
+     並びきらない。言語ボタンは数が増える側なので、左右の余白を詰めて
+     3 つ以上でも 1 行に収まるようにする。 */
+  .lang-switch__btn {
+    padding: 6px 10px;
+  }
+
+  /* 「この内容で予約する」「Confirm reservation」のような長いボタンで、
+     左右 36px の余白が文字を圧迫する。 */
+  .btn {
+    padding: 12px 20px;
+    font-size: 0.95rem;
+  }
+
   .calendar__weekdays,
   .calendar__grid {
     gap: 2px;
@@ -1209,10 +1282,13 @@ a {
   margin-bottom: 16px;
 }
 
+/* ラベル本文と必須/任意バッジの 2 つが並ぶ。ラベルが長い言語では
+   1 行に収まらないので、バッジを次の行へ送る。 */
 .field__label {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
   font-size: 0.85rem;
   font-weight: 600;
   margin-bottom: 6px;

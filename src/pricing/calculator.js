@@ -302,13 +302,32 @@ export function calculatePrice(input) {
   const total = taxableBase + consumptionTax + accommodationTax;
 
   // --- Step 9. 表示用の明細行を作る ---------------------------------------
-  // 室料。人数の内訳を note に添える。
+  //
+  // ここでは文言を組み立てず、「どの辞書キーを、どの値で引くか」だけを返す。
+  // 文字列にしてしまうと、計算した瞬間の言語が結果に焼き付く。内訳ビューは
+  // 言語が変わったときに直近の計算結果を描き直すので、そのとき文言まで
+  // 変わってくれないと、金額だけ英語・ラベルだけ日本語の表になる。
+  //
+  //   labelKey / noteParts … 画面の構造に属する文言。辞書から引く。
+  //   labelText            … 客室名・割引名。運営が持つコンテンツなので
+  //                          言語別フィールドのまま渡し、表示側で解く。
+  //   money                … 金額。書式がロケールで変わるので生の数値で渡し、
+  //                          表示側が formatMoney を通す。
+  //
+  // 率は Intl の percent 書式に任せられるよう、%表記ではなく小数のまま渡す。
   const lines = [
     {
       key: 'roomCharge',
-      label: `${room.name} 室料`,
+      labelKey: 'breakdown.roomCharge',
+      labelParams: { room: room.name },
       amount: roomCharge,
-      note: `${nights}泊 / ${guests}名${extraGuests > 0 ? `（追加${extraGuests}名）` : ''}${isSingleUse ? '（1名利用割引適用済み）' : ''}`,
+      noteParts: [
+        { key: 'breakdown.roomCharge.nights', plurals: { nights, guests } },
+        extraGuests > 0
+          ? { key: 'breakdown.roomCharge.extraGuests', params: { count: extraGuests } }
+          : null,
+        isSingleUse ? { key: 'breakdown.roomCharge.singleUse' } : null,
+      ].filter(Boolean),
     },
   ];
 
@@ -316,8 +335,9 @@ export function calculatePrice(input) {
   if (appliedDiscount) {
     lines.push({
       key: 'discount',
-      label: appliedDiscount.label,
+      labelText: appliedDiscount.label,
       amount: -appliedDiscount.amount,
+      // クーポンコードは翻訳しない（利用者が入力する識別子そのもの）。
       note: appliedDiscount.code,
     });
   }
@@ -325,21 +345,34 @@ export function calculatePrice(input) {
   // サービス料・消費税・宿泊税・合計を順に積む。合計だけ強調する。
   lines.push({
     key: 'serviceCharge',
-    label: `サービス料（${rules.serviceCharge.rate * 100}%）`,
+    labelKey: 'breakdown.serviceCharge',
+    labelPercents: { rate: rules.serviceCharge.rate },
     amount: serviceCharge,
   });
   lines.push({
     key: 'consumptionTax',
-    label: `消費税（${rules.tax.consumptionTaxRate * 100}%）`,
+    labelKey: 'breakdown.consumptionTax',
+    labelPercents: { rate: rules.tax.consumptionTaxRate },
     amount: consumptionTax,
   });
   lines.push({
     key: 'accommodationTax',
-    label: '宿泊税',
+    labelKey: 'breakdown.accommodationTax',
     amount: accommodationTax,
-    note: `1人1泊 ${bracket ? bracket.amount : 0}円 × ${guests}名 × ${nights}泊`,
+    noteParts: [
+      {
+        key: 'breakdown.accommodationTax.note',
+        money: { amount: bracket ? bracket.amount : 0 },
+        plurals: { guests, nights },
+      },
+    ],
   });
-  lines.push({ key: 'total', label: '合計', amount: total, emphasis: true });
+  lines.push({
+    key: 'total',
+    labelKey: 'breakdown.total',
+    amount: total,
+    emphasis: true,
+  });
 
   return {
     nights,

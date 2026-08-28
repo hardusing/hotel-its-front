@@ -3,6 +3,9 @@
 // 添えないと、画面の数字をどこまで信用してよいか利用者に判断できない。
 // とくに通信が途切れているときは、古い数字が最新の顔をして残り続ける。
 
+import { t, onLocaleChange } from '../i18n/index.js';
+import { formatTime } from '../i18n/format.js';
+
 // これ以上古くなったら色を薄くする。バックオフの上限（5分）と揃えてあり、
 // 「正常なら必ず更新されているはずの間隔」を過ぎたことを意味する。
 const STALE_AFTER_MS = 5 * 60 * 1000;
@@ -13,23 +16,12 @@ const RECHECK_INTERVAL_MS = 30 * 1000;
 
 const STALE_CLASS = 'rooms__updated--stale';
 
+// 言語変更の購読解除。destroyLastUpdated で外す。
+let unsubscribeLocale = null;
+
 let el = null;
 let lastUpdatedAt = null;
 let recheckTimer = null;
-
-// 表示に使うロケール。言語切り替え（<html lang>）に追随させる。
-function currentLocale() {
-  return (typeof document !== 'undefined' && document.documentElement.lang) || 'ja';
-}
-
-// 時刻部分だけを地域慣習に沿って整形する。
-// 手で ':' を組み立てると 12/24 時間制の違いを取りこぼす。
-function formatTime(date) {
-  return new Intl.DateTimeFormat(currentLocale(), {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-}
 
 // いまの lastUpdatedAt を画面へ反映する。
 function render() {
@@ -42,7 +34,7 @@ function render() {
     return;
   }
 
-  el.textContent = `最終更新 ${formatTime(lastUpdatedAt)}`;
+  el.textContent = t('rooms.lastUpdated', { time: formatTime(lastUpdatedAt) });
   el.hidden = false;
   // 経過時間で判定する。表示中の時刻が変わらなくても古くはなっていく。
   el.classList.toggle(STALE_CLASS, Date.now() - lastUpdatedAt.getTime() >= STALE_AFTER_MS);
@@ -50,9 +42,16 @@ function render() {
 
 /**
  * 表示先の要素を掴む（起動時に一度だけ）。
+ *
+ * 言語変更もここで購読する。表示している時刻は data-i18n では差し替えられない
+ * （値が実行時に決まる）ので、以前は lang.js の applyLanguage が最後に
+ * この画面を名指しで描き直していた。取り残しに気付くたび applyLanguage へ
+ * 名指しを足していく形は、画面が増えるほど抜ける。自分の描き直し方を
+ * 知っているのはこのモジュールなので、購読もここに置く。
  */
 export function initLastUpdated() {
   el = document.getElementById('rooms-updated');
+  if (!unsubscribeLocale) unsubscribeLocale = onLocaleChange(render);
   render();
 }
 
@@ -88,17 +87,13 @@ function startRecheck() {
 }
 
 /**
- * 表示を今の状態で組み直す。
- * 言語切り替えで <html lang> が変わったときに、時刻の書式を追随させる用途。
- */
-export function refreshLastUpdated() {
-  render();
-}
-
-/**
  * 再判定タイマーを止める（後片付け・テスト用）。
  */
 export function destroyLastUpdated() {
+  if (unsubscribeLocale) {
+    unsubscribeLocale();
+    unsubscribeLocale = null;
+  }
   if (recheckTimer !== null) {
     clearInterval(recheckTimer);
     recheckTimer = null;

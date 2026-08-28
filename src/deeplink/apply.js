@@ -4,17 +4,13 @@
 // という分担にしてある。ここは DOM とアプリの状態を触るが、
 // 「どのページか」は知らない。トップページも LP も同じ経路を通る。
 
-import { applyLanguage, resolveInitialLanguage } from '../lang';
+import { t, tPlural } from '../i18n/index.js';
+import { formatDateShort } from '../i18n/format.js';
 import { openRoomModal, setDeepLinkDefaults } from '../roomModal';
 import { isBookable } from '../inventory/stockLevel';
 import { showDeepLinkNotice } from './notice';
 
 /** 日付の見出し表記（2026-09-12 → 9/12）。通知バーの文言用。 */
-function shortDate(dateStr) {
-  const [, m, d] = dateStr.split('-');
-  return `${Number(m)}/${Number(d)}`;
-}
-
 /**
  * 無視したパラメータをコンソールに記録する。
  *
@@ -54,21 +50,12 @@ export function applyDeepLink(state, ctx = {}) {
 
   reportInvalid(invalid);
 
-  // --- 言語 ---------------------------------------------------------------
-  // 言語の切り替えは lang.js の 1 実装だけを使う。ここで
-  // document.documentElement.lang を直接書くと、ボタン経由と URL 経由で
-  // 「言語を変えるとは何をすることか」の定義が 2 つできてしまう。
+  // 言語はここでは扱わない。?lang= を含む言語の決定は起動時に
+  // initLanguage（lang.js → i18n/detect.js）が済ませている。
+  // 描画の後に走るこの関数で言語を決めると、一覧を描いてから言語が変わり、
+  // 描き直しが 1 回余分に走ることになる。
   //
-  // ただし、翻訳対象を持たないページ（キャンペーン LP）でブラウザ判定だけを
-  // 根拠に <html lang> を書き換えない。日本語のまま表示される内容に
-  // lang="en" が付くと、読み上げの発音がその時点で崩れる。
-  // URL で明示された場合は、翻訳が無くてもその指定に従う。
-  const translatable = document.querySelector('[data-i18n]') !== null;
-  if (booking.lang || translatable) {
-    applyLanguage(resolveInitialLanguage(booking.lang));
-  }
-
-  // 言語は通知の対象にしない。ボタンで即座に戻せるうえ、
+  // 通知バーにも載せない。ボタンで即座に戻せるうえ、
   // 表示言語が変わったことは画面を見れば分かる。
   const applied = [];
 
@@ -83,11 +70,17 @@ export function applyDeepLink(state, ctx = {}) {
   const hasDefaults = Object.values(defaults).some((v) => v !== null);
   if (hasDefaults) setDeepLinkDefaults(defaults);
 
+  //
+  // 文言を組み立てるのは言語を確定させた後。順番を逆にすると、
+  // ?lang=en で開いたときに通知バーだけ日本語で出る。
   if (booking.checkIn && booking.checkOut) {
-    applied.push(`${shortDate(booking.checkIn)}〜${shortDate(booking.checkOut)}`);
+    applied.push(t('notice.item.dates', {
+      checkIn: formatDateShort(booking.checkIn),
+      checkOut: formatDateShort(booking.checkOut),
+    }));
   }
-  if (booking.guests) applied.push(`${booking.guests}名`);
-  if (booking.promo) applied.push(`クーポン ${booking.promo}`);
+  if (booking.guests) applied.push(tPlural('guests', booking.guests));
+  if (booking.promo) applied.push(t('notice.item.promo', { code: booking.promo }));
 
   // --- 客室 ---------------------------------------------------------------
   // 予約できない部屋のモーダルは開かない。開いても最初から満室の警告が出て、

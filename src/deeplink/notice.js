@@ -5,6 +5,8 @@
 // 最初の 1 アクションを強いることになる。適用は済ませたうえで、
 // 何をしたかを控えめに出し、その場で取り消せるようにする。
 
+import { t } from '../i18n/index.js';
+
 const NOTICE_ID = 'deeplink-notice';
 
 /**
@@ -31,13 +33,14 @@ export function showDeepLinkNotice({ items, onCancel }) {
 
   const text = document.createElement('p');
   text.className = 'deeplink-notice__text';
-  text.textContent = `${items.join('・')}を適用しました。`;
+  // 項目の区切りも言語で変わる（日本語は中黒、英語はカンマ）ので辞書から引く。
+  text.textContent = t('notice.applied', { items: items.join(t('notice.separator')) });
   el.appendChild(text);
 
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
   cancelBtn.className = 'deeplink-notice__cancel';
-  cancelBtn.textContent = '取り消す';
+  cancelBtn.textContent = t('notice.cancel');
   cancelBtn.addEventListener('click', () => {
     el.remove();
     onCancel();
@@ -47,7 +50,7 @@ export function showDeepLinkNotice({ items, onCancel }) {
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'deeplink-notice__close';
-  closeBtn.setAttribute('aria-label', '通知を閉じる');
+  closeBtn.setAttribute('aria-label', t('notice.close'));
   closeBtn.textContent = '×';
   // 閉じるだけ。適用した内容はそのまま残す（取り消しとは別の操作）。
   closeBtn.addEventListener('click', () => el.remove());

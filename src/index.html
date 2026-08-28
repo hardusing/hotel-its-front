@@ -3,8 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hotel ITS｜空に一番近い、やすらぎのひととき</title>
-  <meta name="description" content="都会の真ん中で過ごす、上質な滞在体験。シングル・ダブル・スイートの3タイプから、空室と料金をカレンダーで確かめてそのままご予約いただけます。" />
+  <!--
+    <head> の文言も辞書へ移してある。data-i18n は textContent を、
+    data-i18n-attr は "属性名:キー" の形で属性を差し替える（lang.js を参照）。
+    ここに書いてある日本語は初期値で、JS が読み込まれる前や落ちた場合に
+    空のタイトル・空の説明を出さないために残している。
+  -->
+  <title data-i18n="meta.title">Hotel ITS｜空に一番近い、やすらぎのひととき</title>
+  <meta name="description" data-i18n-attr="content:meta.description" content="都会の真ん中で過ごす、上質な滞在体験。シングル・ダブル・スイートの3タイプから、空室と料金をカレンダーで確かめてそのままご予約いただけます。" />
 
   <!--
     SNS やメッセージアプリに URL を貼ったときのカード表示。
@@ -13,15 +19,43 @@
   -->
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Hotel ITS" />
-  <meta property="og:title" content="Hotel ITS｜空に一番近い、やすらぎのひととき" />
-  <meta property="og:description" content="都会の真ん中で過ごす、上質な滞在体験。空室と料金をカレンダーで確かめて、そのままご予約いただけます。" />
+  <meta property="og:title" data-i18n-attr="content:meta.ogTitle" content="Hotel ITS｜空に一番近い、やすらぎのひととき" />
+  <meta property="og:description" data-i18n-attr="content:meta.ogDescription" content="都会の真ん中で過ごす、上質な滞在体験。空室と料金をカレンダーで確かめて、そのままご予約いただけます。" />
   <meta property="og:url" content="https://example.com/" />
   <meta property="og:image" content="https://example.com/images/ogp.jpg" />
+  <!--
+    og:locale は言語コードではなく "ja_JP" の形で書く決まり。
+    値の更新は lang.js の applyDocumentLanguage が行う（data-i18n-attr は
+    使わない。翻訳対象を持たない LP でも同じ更新が要るため、仕組みを
+    文書属性側に一本化している）。
+    SNS のクローラは JS を実行しないので、ここが実際に効くのは
+    サーバー側で言語ごとの HTML を返すようになってから。
+  -->
   <meta property="og:locale" content="ja_JP" />
 
+
+  <!--
+    言語ごとの URL を検索エンジンに伝える。
+    同じ内容を複数の言語で出すページは、これが無いと重複コンテンツとみなされ、
+    どちらか一方しか検索結果に載らないことがある。
+    x-default は「どの言語指定にも当てはまらない人向け」＝ 指定なしの URL。
+
+    href は絶対 URL でなければ読まれない。公開ドメインが決まったら
+    https://example.com の部分を差し替えること（og:url と同じ場所）。
+
+    なお表示言語は JS が決めるため、いまはどの URL を開いても返る HTML は
+    同じもの（日本語）で、切り替わるのはブラウザ上だけ。クローラは JS を
+    実行しないので、ここが本当に効くのはサーバー側で言語ごとの HTML を
+    返すようになってから。
+  -->
+  <link rel="alternate" hreflang="ja" href="https://example.com/?lang=ja" />
+  <link rel="alternate" hreflang="en" href="https://example.com/?lang=en" />
+  <link rel="alternate" hreflang="zh-Hans" href="https://example.com/?lang=zh" />
+  <link rel="alternate" hreflang="x-default" href="https://example.com/" />
+
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Hotel ITS｜空に一番近い、やすらぎのひととき" />
-  <meta name="twitter:description" content="都会の真ん中で過ごす、上質な滞在体験。空室と料金をカレンダーで確かめて、そのままご予約いただけます。" />
+  <meta name="twitter:title" data-i18n-attr="content:meta.ogTitle" content="Hotel ITS｜空に一番近い、やすらぎのひととき" />
+  <meta name="twitter:description" data-i18n-attr="content:meta.ogDescription" content="都会の真ん中で過ごす、上質な滞在体験。空室と料金をカレンダーで確かめて、そのままご予約いただけます。" />
   <meta name="twitter:image" content="https://example.com/images/ogp.jpg" />
 </head>
 <body>
@@ -36,9 +70,10 @@
           <li><a href="#reserve" class="nav__link nav__link--cta" data-i18n="nav.reserve">予約</a></li>
         </ul>
       </nav>
-      <div class="lang-switch" role="group" aria-label="Language">
+      <div class="lang-switch" role="group" data-i18n-attr="aria-label:common.langSwitch" aria-label="Language">
         <button type="button" class="lang-switch__btn" data-lang="ja">JP</button>
         <button type="button" class="lang-switch__btn" data-lang="en">EN</button>
+        <button type="button" class="lang-switch__btn" data-lang="zh">CN</button>
       </div>
     </div>
   </header>

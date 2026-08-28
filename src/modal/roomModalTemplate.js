@@ -8,11 +8,21 @@
 //
 // initRoomModal() が #room-modal の不在を見て、この文字列から生成して body に差す。
 // ページ側は <div id="room-modal"> を書かなくてよい（書いてあればそちらを使う）。
+//
+// 文言には data-i18n（textContent）と data-i18n-attr（属性）を付けてある。
+// ここに書いてある日本語は初期値であって正ではない。差し込んだ直後に
+// initRoomModal が applyTranslations(modal) を呼んで現在の言語に合わせ、
+// 以降は言語変更のたびに lang.js の購読が同じ走査をやり直す。
+// 素の日本語を残してあるのは、翻訳が当たる前の一瞬や JS が落ちた場合に、
+// 空のラベルが並んだフォームを見せないため。
+//
+// <label> の中はテキストと必須バッジの 2 つに分かれているので、テキスト側も
+// <span> で包んである。label に直接 textContent を書くとバッジごと消える。
 export const ROOM_MODAL_HTML = `
   <div class="modal" id="room-modal" hidden>
     <div class="modal__overlay" data-modal-close></div>
     <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="modal-name">
-      <button type="button" class="modal__close" data-modal-close aria-label="閉じる">&times;</button>
+      <button type="button" class="modal__close" data-modal-close data-i18n-attr="aria-label:common.close">&times;</button>
       <div class="modal__media" id="modal-media">
         <img class="modal__img" id="modal-img" src="" alt="" />
       </div>
@@ -28,7 +38,7 @@ export const ROOM_MODAL_HTML = `
             <div class="booking__calendar" id="calendar-mount"></div>
 
             <!-- カレンダーで選んだ日付の表示欄 -->
-            <p class="booking__dates" id="booking-dates">日付を選択してください</p>
+            <p class="booking__dates" id="booking-dates" data-i18n="modal.noDates">日付を選択してください</p>
 
             <!--
               日付の入力欄はカレンダーに置き換えたが、値の保持役として残す。
@@ -37,11 +47,11 @@ export const ROOM_MODAL_HTML = `
             -->
             <div class="booking__fields booking__fields--hidden">
               <div class="booking__field">
-                <label for="checkin" class="booking__label">チェックイン</label>
+                <label for="checkin" class="booking__label" data-i18n="modal.checkIn">チェックイン</label>
                 <input type="date" id="checkin" class="booking__input" />
               </div>
               <div class="booking__field">
-                <label for="checkout" class="booking__label">チェックアウト</label>
+                <label for="checkout" class="booking__label" data-i18n="modal.checkOut">チェックアウト</label>
                 <input type="date" id="checkout" class="booking__input" />
               </div>
             </div>
@@ -52,16 +62,16 @@ export const ROOM_MODAL_HTML = `
               金額を確かめられないと選び直しのたびにフォームまで往復させることになるため。
             -->
             <div class="booking__field booking__field--guests">
-              <label for="booking-guests" class="booking__label">宿泊人数</label>
+              <label for="booking-guests" class="booking__label" data-i18n="modal.guests">宿泊人数</label>
               <select id="booking-guests" class="booking__input"></select>
             </div>
 
             <!-- クーポン。入力しただけでは効かせず、「適用」で確定させる。 -->
             <div class="booking__coupon">
-              <label for="coupon-code" class="booking__label">クーポンコード</label>
+              <label for="coupon-code" class="booking__label" data-i18n="modal.couponCode">クーポンコード</label>
               <div class="booking__coupon-row">
                 <input type="text" id="coupon-code" class="booking__input" placeholder="WELCOME" autocomplete="off" />
-                <button type="button" class="btn booking__coupon-apply" id="coupon-apply">適用</button>
+                <button type="button" class="btn booking__coupon-apply" id="coupon-apply" data-i18n="modal.couponApply">適用</button>
               </div>
               <p class="booking__coupon-msg" id="coupon-msg" hidden></p>
             </div>
@@ -75,15 +85,15 @@ export const ROOM_MODAL_HTML = `
               なぜ消えたのか利用者に分からないため。
             -->
             <div class="booking__alert" id="booking-alert" role="alert" hidden>
-              <p class="booking__alert-text">
+              <p class="booking__alert-text" data-i18n="modal.soldOutAlert">
                 ご覧いただいている間に満室となりました。別の日程か、他の客室をご検討ください。
               </p>
-              <button type="button" class="booking__alert-link" data-browse-rooms>
+              <button type="button" class="booking__alert-link" data-browse-rooms data-i18n="modal.browseOtherRooms">
                 他の客室を見る
               </button>
             </div>
 
-            <button type="button" class="btn btn--primary booking__reserve" id="booking-reserve" disabled>
+            <button type="button" class="btn btn--primary booking__reserve" id="booking-reserve" disabled data-i18n="modal.reserve">
               予約する
             </button>
 
@@ -92,7 +102,7 @@ export const ROOM_MODAL_HTML = `
               URL は条件が変わるたびに書き換わっているので、ここでは
               location.href をそのまま渡せばよい。
             -->
-            <button type="button" class="booking__share" id="booking-share">
+            <button type="button" class="booking__share" id="booking-share" data-i18n="modal.share">
               この条件を共有
             </button>
           </div>
@@ -100,36 +110,36 @@ export const ROOM_MODAL_HTML = `
 
         <!-- ② 予約フォームビュー -->
         <form class="modal__view reservation-form" data-view="form" hidden>
-          <button type="button" class="reservation-form__back" data-form-back>← 戻る</button>
-          <h3 class="reservation-form__title">予約情報の入力</h3>
+          <button type="button" class="reservation-form__back" data-form-back data-i18n="common.back">← 戻る</button>
+          <h3 class="reservation-form__title" data-i18n="form.title">予約情報の入力</h3>
           <p class="reservation-form__summary" id="form-summary"></p>
 
           <div class="field">
-            <label for="guestName" class="field__label">予約者名<span class="field__req">必須</span></label>
+            <label for="guestName" class="field__label"><span data-i18n="form.guestName">予約者名</span><span class="field__req" data-i18n="common.required">必須</span></label>
             <input type="text" id="guestName" name="guestName" class="field__input" autocomplete="name" />
             <span class="field__error" data-error-for="guestName"></span>
           </div>
 
           <div class="field">
-            <label for="email" class="field__label">メールアドレス<span class="field__req">必須</span></label>
+            <label for="email" class="field__label"><span data-i18n="form.email">メールアドレス</span><span class="field__req" data-i18n="common.required">必須</span></label>
             <input type="email" id="email" name="email" class="field__input" autocomplete="email" />
             <span class="field__error" data-error-for="email"></span>
           </div>
 
           <div class="field">
-            <label for="phone" class="field__label">電話番号<span class="field__opt">任意</span></label>
+            <label for="phone" class="field__label"><span data-i18n="form.phone">電話番号</span><span class="field__opt" data-i18n="common.optional">任意</span></label>
             <input type="tel" id="phone" name="phone" class="field__input" autocomplete="tel" />
             <span class="field__error" data-error-for="phone"></span>
           </div>
 
           <div class="field">
-            <label for="guests" class="field__label">宿泊人数<span class="field__req">必須</span></label>
+            <label for="guests" class="field__label"><span data-i18n="modal.guests">宿泊人数</span><span class="field__req" data-i18n="common.required">必須</span></label>
             <select id="guests" name="guests" class="field__input"></select>
             <span class="field__error" data-error-for="guests"></span>
           </div>
 
           <div class="field">
-            <label for="notes" class="field__label">備考<span class="field__opt">任意</span></label>
+            <label for="notes" class="field__label"><span data-i18n="form.notes">備考</span><span class="field__opt" data-i18n="common.optional">任意</span></label>
             <textarea id="notes" name="notes" class="field__input field__textarea" rows="3"></textarea>
             <span class="field__error" data-error-for="notes"></span>
           </div>
@@ -142,12 +152,12 @@ export const ROOM_MODAL_HTML = `
           -->
           <div class="reservation-form__alert">
             <p class="reservation-form__error" id="form-general-error" hidden></p>
-            <button type="button" class="reservation-form__browse" id="form-browse-rooms" data-browse-rooms hidden>
+            <button type="button" class="reservation-form__browse" id="form-browse-rooms" data-browse-rooms hidden data-i18n="modal.browseOtherRooms">
               他の客室を見る
             </button>
           </div>
 
-          <button type="submit" class="btn btn--primary reservation-form__submit" id="form-submit">
+          <button type="submit" class="btn btn--primary reservation-form__submit" id="form-submit" data-i18n="form.submit">
             この内容で予約する
           </button>
         </form>
@@ -155,11 +165,11 @@ export const ROOM_MODAL_HTML = `
         <!-- ③ 予約完了ビュー -->
         <div class="modal__view booking-complete" data-view="complete" hidden>
           <div class="booking-complete__icon">✓</div>
-          <h3 class="booking-complete__title">ご予約が完了しました</h3>
-          <p class="booking-complete__label">予約番号</p>
+          <h3 class="booking-complete__title" data-i18n="complete.title">ご予約が完了しました</h3>
+          <p class="booking-complete__label" data-i18n="complete.orderLabel">予約番号</p>
           <p class="booking-complete__order" id="complete-order"></p>
-          <p class="booking-complete__note">確認メールをお送りしました。予約番号は大切に保管してください。</p>
-          <button type="button" class="btn btn--primary booking-complete__close" data-modal-close>
+          <p class="booking-complete__note" data-i18n="complete.note">確認メールをお送りしました。予約番号は大切に保管してください。</p>
+          <button type="button" class="btn btn--primary booking-complete__close" data-modal-close data-i18n="common.close">
             閉じる
           </button>
         </div>

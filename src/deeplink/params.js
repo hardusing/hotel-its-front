@@ -1,4 +1,4 @@
-import { translations } from '../i18n.js';
+import { isSupportedLocale } from '../i18n/index.js';
 
 /**
  * ディープリンクのクエリパラメータを解釈・生成する純粋関数群。
@@ -106,9 +106,9 @@ function parsePromo(value) {
   return { value: trimmed, reason: null };
 }
 
-/** 対応言語のみ。判定の正は i18n の translations 側に置く。 */
+/** 対応言語のみ。判定は i18n の isSupportedLocale 1 つに任せる。 */
 function parseLang(value) {
-  if (!Object.prototype.hasOwnProperty.call(translations, value)) {
+  if (!isSupportedLocale(value)) {
     return { value: null, reason: 'unsupported language' };
   }
   return { value, reason: null };

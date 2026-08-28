@@ -82,10 +82,13 @@ export const mockPricingRules = {
     // 各ステップごとに丸め、明細行の合計が総額と一致するようにする。
     rounding: 'floor',
 
+    // 割引名は客室名と同じく「運営が足し引きするコンテンツ」なので、
+    // 辞書ではなく言語別フィールドで持つ（mock/rooms.js のコメントを参照）。
+    // 割引を 1 つ増やすたびにフロントの辞書を編集する形にはしない。
     rules: [
       {
         code: 'EARLY30',
-        label: '早期予約割引',
+        label: { ja: '早期予約割引', en: 'Early booking discount', zh: '早鸟优惠' },
         // type: 'rate' は率引き、'amount' は定額引き。
         type: 'rate',
         value: 0.15,
@@ -96,7 +99,7 @@ export const mockPricingRules = {
       },
       {
         code: 'STAY3',
-        label: '連泊割引',
+        label: { ja: '連泊割引', en: 'Extended stay discount', zh: '连住优惠' },
         type: 'rate',
         value: 0.1,
         // 条件: この泊数以上の滞在で成立。
@@ -105,7 +108,7 @@ export const mockPricingRules = {
       },
       {
         code: 'WELCOME',
-        label: 'ウェルカムクーポン',
+        label: { ja: 'ウェルカムクーポン', en: 'Welcome coupon', zh: '欢迎优惠券' },
         type: 'amount',
         // 定額割引（円）。小計がこれを下回る場合は小計を上限とし、マイナスにしない。
         value: 3000,

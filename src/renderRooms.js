@@ -1,6 +1,6 @@
-import { fetchRooms, resolveImageUrl } from './api/rooms';
+import { fetchRooms, resolveImageUrl, roomName, roomDescription } from './api/rooms';
 import { openRoomModal } from './roomModal';
-import { formatMoney } from './pricing/format.js';
+import { formatMoney } from './i18n/format.js';
 import { loadPricingRules } from './pricing/rulesStore.js';
 import { toNightlyDisplayPrice, nightlyPriceNote } from './pricing/displayPrice.js';
 import {
@@ -9,6 +9,7 @@ import {
   isBookable,
   readStock,
 } from './inventory/stockLevel';
+import { t, onLocaleChange } from './i18n/index.js';
 
 // 在庫が動いたことを知らせるハイライト用の修飾子。
 const UPDATED_CLASS = 'room-card__stock--updated';
@@ -31,6 +32,15 @@ const roomsById = new Map();
 // トップページは #rooms-grid、キャンペーン LP は #campaign-rooms と描画先が違うので、
 // applyInventory が固定の id を見に行くと LP 側で在庫が一切反映されない。
 let currentGridId = DEFAULT_GRID_ID;
+
+// 直近の renderRooms に渡された引数。言語が変わったときに同じ条件で
+// 描き直すために持つ。トップページと LP で描画先も対象客室も違うので、
+// 引数を覚えていないと再描画のしようがない。
+let lastOptions = null;
+
+// 言語変更の購読は 1 回だけ張る。renderRooms が呼ばれるたびに登録すると、
+// 在庫の OUT_OF_STOCK による再描画のたびに購読者が増えていく。
+let localeSubscribed = false;
 
 // 在庫表示を一度光らせる。
 function flashStock(stockEl) {
@@ -58,7 +68,7 @@ function updateCardStock(card, room) {
 
   const reserveBtn = card.querySelector('.room-card__reserve');
   reserveBtn.disabled = !bookable;
-  reserveBtn.textContent = bookable ? '予約する' : '満室';
+  reserveBtn.textContent = bookable ? t('rooms.reserve') : t('rooms.soldOut');
 
   // 満室バッジは満室のときだけ存在させる（満室から復活する場合もあるので両方向）。
   const media = card.querySelector('.room-card__media');
@@ -66,7 +76,7 @@ function updateCardStock(card, room) {
   if (!bookable && !badge) {
     const el = document.createElement('span');
     el.className = 'room-card__badge';
-    el.textContent = '満室';
+    el.textContent = t('rooms.soldOut');
     media.appendChild(el);
   } else if (bookable && badge) {
     badge.remove();
@@ -96,7 +106,7 @@ function createRoomCard(room, rules) {
   card.innerHTML = `
     <div class="room-card__media">
       <img class="room-card__img" alt="" loading="lazy" />
-      ${!bookable ? '<span class="room-card__badge">満室</span>' : ''}
+      ${!bookable ? '<span class="room-card__badge"></span>' : ''}
     </div>
     <div class="room-card__body">
       <h3 class="room-card__name"></h3>
@@ -114,21 +124,31 @@ function createRoomCard(room, rules) {
   // 引用符ひとつで属性を抜け出せる（alt="${room.name}" の形が危ない）。
   const img = card.querySelector('.room-card__img');
   img.src = resolveImageUrl(room.imagePath);
-  img.alt = room.name;
+  img.alt = roomName(room);
 
-  card.querySelector('.room-card__name').textContent = room.name;
-  card.querySelector('.room-card__desc').textContent = room.description;
+  // 客室名と説明は API の言語別フィールドを現在の言語に解いたもの。
+  card.querySelector('.room-card__name').textContent = roomName(room);
+  card.querySelector('.room-card__desc').textContent = roomDescription(room);
   card.querySelector('.room-card__stock').textContent = getStockLabel(room.stock);
-  card.querySelector('.room-card__tax-note').textContent =
-    `${nightlyPriceNote(rules)}・曜日により変動`;
-  card.querySelector('.room-card__reserve').textContent = bookable ? '予約する' : '満室';
+  // 注記の区切り（日本語の中黒 / 英語のカンマ）まで言語で変わるので、
+  // 文ごと辞書に持たせて断片を差し込む形にする。
+  card.querySelector('.room-card__tax-note').textContent = t('rooms.priceNote', {
+    taxNote: nightlyPriceNote(rules),
+    varies: t('rooms.variesByWeekday'),
+  });
+  card.querySelector('.room-card__reserve').textContent = bookable
+    ? t('rooms.reserve')
+    : t('rooms.soldOut');
+
+  const badge = card.querySelector('.room-card__badge');
+  if (badge) badge.textContent = t('rooms.soldOut');
 
   // 単価だけは <span> を含むので組み立てる。金額は formatMoney が数値から
   // 作った文字列なので、外部の文字が混ざる余地がない。
   const priceEl = card.querySelector('.room-card__price');
   priceEl.textContent = formatMoney(toNightlyDisplayPrice(room.price, rules));
   const unit = document.createElement('span');
-  unit.textContent = '/泊〜';
+  unit.textContent = t('rooms.perNightFrom');
   priceEl.appendChild(unit);
 
   // ハイライトはアニメーション終了で自分から外れる。生成時に一度だけ張るので、
@@ -222,6 +242,17 @@ export async function renderRooms(options = {}) {
   const grid = document.getElementById(gridId);
   if (!grid) return;
 
+  // 言語が変わったら同じ条件で描き直す。カードは innerHTML と textContent で
+  // 組み立てているので、data-i18n の走査では一切触れられない。自分の描き方を
+  // 知っているのはこのモジュールだけなので、描き直しもここが引き受ける。
+  lastOptions = { gridId, roomIds };
+  if (!localeSubscribed) {
+    localeSubscribed = true;
+    onLocaleChange(() => {
+      if (lastOptions) renderRooms(lastOptions);
+    });
+  }
+
   // 在庫の反映先を、いま描画したグリッドに合わせる。
   currentGridId = gridId;
 
@@ -252,8 +283,12 @@ export async function renderRooms(options = {}) {
   } catch (err) {
     stockSnapshot.clear();
     roomsById.clear();
-    grid.innerHTML =
-      '<p class="rooms__error">客室情報の取得に失敗しました。時間をおいて再度お試しください。</p>';
+    // エラー文も textContent で入れる（辞書の値を HTML として解釈させない）。
+    grid.innerHTML = '';
+    const error = document.createElement('p');
+    error.className = 'rooms__error';
+    error.textContent = t('rooms.error');
+    grid.appendChild(error);
     // eslint-disable-next-line no-console
     console.error(err);
   }

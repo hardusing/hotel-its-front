@@ -9,7 +9,8 @@ import { renderRooms, applyInventory, getRenderedRooms } from './renderRooms';
 import { initRoomModal, notifyInventoryChange } from './roomModal';
 import { createInventoryPoller } from './inventory/poller';
 import { initLastUpdated, setLastUpdated } from './inventory/lastUpdated';
-import { initLangSwitch } from './lang';
+import { initLanguage, initLangSwitch } from './lang.js';
+import { enablePseudoLocale } from './i18n/pseudo.js';
 import { parseDeepLink } from './deeplink/params.js';
 import { applyDeepLink } from './deeplink/apply.js';
 import { todayStr } from './booking';
@@ -43,6 +44,19 @@ export async function startPage(options = {}) {
     // ディープリンクで開かれたかどうかは、LP の効果を見るのに要る。
     deepLink: Boolean(deepLink.booking.room),
   });
+
+  // 疑似ロケールは言語の決定より前に登録する。?lang=qps で開いたとき、
+  // 決定の時点で対応言語として見えていないと弾かれる。
+  // 本番では enablePseudoLocale が何もしない。
+  enablePseudoLocale();
+
+  // 表示言語は描画より前に確定させる。順番を逆にすると、日本語で一覧を
+  // 描いた直後に言語が変わって描き直すことになり、通信も描画も 2 度走る。
+  //
+  // 翻訳の当て込みもここで配線される。以降に作られる部品（モーダル・
+  // カレンダー・カード）は自分で onLocaleChange を購読するので、
+  // 「あとから差し込まれた要素だけ翻訳が当たらない」が起きない。
+  initLanguage({ paramLang: deepLink.booking.lang });
 
   initRoomModal({ onStockChange: render });
   initLastUpdated();

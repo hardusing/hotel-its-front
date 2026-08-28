@@ -12,15 +12,26 @@
 // 内訳ビューの合計だけは宿泊税まで含んだ請求総額なので、注記の文言を分けている。
 
 import { applyTaxes } from './taxes.js';
+import { t } from '../i18n/index.js';
+
+// 注記は定数ではなく関数にしてある。定数のままだと、モジュールが
+// 読み込まれた瞬間の言語で文字列が焼き付き、あとで言語を変えても
+// 変わらない（import した側が古い文字列を掴み続ける）。
 
 /** 単価表示（カード・カレンダー・モーダル見出し）に添える注記。 */
-export const NIGHTLY_PRICE_NOTE = '税・サービス料込 / 宿泊税別';
+export function nightlyPriceNoteText() {
+  return t('price.nightlyNote');
+}
 
 /** ルールが取れず税込に換算できなかったときの注記。 */
-export const NIGHTLY_PRICE_NOTE_FALLBACK = '税・サービス料別';
+export function nightlyPriceNoteFallbackText() {
+  return t('price.nightlyNoteFallback');
+}
 
 /** 請求総額（内訳の合計・フォームの要約）に添える注記。 */
-export const TOTAL_PRICE_NOTE = '税・サービス料・宿泊税込';
+export function totalPriceNote() {
+  return t('price.totalNote');
+}
 
 /**
  * 税抜の1泊単価を、表示用の税込単価に換算する。
@@ -47,5 +58,5 @@ export function toNightlyDisplayPrice(baseRate, rules) {
  * @returns {string}
  */
 export function nightlyPriceNote(rules) {
-  return rules ? NIGHTLY_PRICE_NOTE : NIGHTLY_PRICE_NOTE_FALLBACK;
+  return rules ? nightlyPriceNoteText() : nightlyPriceNoteFallbackText();
 }

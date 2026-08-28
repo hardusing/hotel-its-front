@@ -20,6 +20,26 @@
   <meta property="og:image" content="https://example.com/images/ogp-campaign.jpg" />
   <meta property="og:locale" content="ja_JP" />
 
+
+  <!--
+    言語ごとの URL を検索エンジンに伝える。
+    同じ内容を複数の言語で出すページは、これが無いと重複コンテンツとみなされ、
+    どちらか一方しか検索結果に載らないことがある。
+    x-default は「どの言語指定にも当てはまらない人向け」＝ 指定なしの URL。
+
+    href は絶対 URL でなければ読まれない。公開ドメインが決まったら
+    https://example.com の部分を差し替えること（og:url と同じ場所）。
+
+    なお表示言語は JS が決めるため、いまはどの URL を開いても返る HTML は
+    同じもの（日本語）で、切り替わるのはブラウザ上だけ。クローラは JS を
+    実行しないので、ここが本当に効くのはサーバー側で言語ごとの HTML を
+    返すようになってから。
+  -->
+  <link rel="alternate" hreflang="ja" href="https://example.com/campaign/?lang=ja" />
+  <link rel="alternate" hreflang="en" href="https://example.com/campaign/?lang=en" />
+  <link rel="alternate" hreflang="zh-Hans" href="https://example.com/campaign/?lang=zh" />
+  <link rel="alternate" hreflang="x-default" href="https://example.com/campaign/" />
+
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="秋の連泊キャンペーン｜最大30%OFF｜Hotel ITS" />
   <meta name="twitter:description" content="3泊以上のご予約で対象客室が最大30%OFF。レイトチェックアウト14:00と朝食2名分無料つき。9/1〜11/30のご宿泊が対象。" />

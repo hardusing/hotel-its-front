@@ -7,15 +7,18 @@ import { loadPricingRules } from './pricing/rulesStore.js';
 import {
   toNightlyDisplayPrice,
   nightlyPriceNote,
-  TOTAL_PRICE_NOTE,
+  totalPriceNote,
 } from './pricing/displayPrice.js';
 import { createMonthCalendar } from './calendar/monthCalendar';
-import { formatMoney } from './pricing/format.js';
+import { formatMoney, formatDate } from './i18n/format.js';
 import { isBookable, readStock } from './inventory/stockLevel';
 import { ROOM_MODAL_HTML } from './modal/roomModalTemplate.js';
 import { track, toPriceBand, EVENTS } from './analytics/tracker.js';
 import { syncDeepLinkUrl } from './deeplink/urlSync.js';
 import { showToast } from './ui/toast.js';
+import { t, tPlural, onLocaleChange } from './i18n/index.js';
+import { applyTranslations } from './lang.js';
+import { roomName, roomDescription } from './api/rooms';
 
 let currentRoom = null;
 let els = null;
@@ -48,18 +51,32 @@ let appliedCoupon = '';
 // 利用者が通知バーで取り消したら null に戻す。
 let deepLinkDefaults = null;
 
+// 言語変更の購読解除。initRoomModal を 2 度呼んでも購読が積み上がらないよう持つ。
+let unsubscribeLocale = null;
+
 // OUT_OF_STOCK 後に自動で閉じるためのタイマー。
 // 持っておかないと、1.8 秒以内に別の部屋を開いたとき、
 // 開いたばかりのモーダルをこのタイマーが閉じてしまう。
 let autoCloseTimer = null;
 
-// 日付未選択のときに表示欄へ出す文言
-const NO_DATES_TEXT = '日付を選択してください';
+// いま画面に出ている日程。言語が変わったときに同じ日付を書式だけ変えて
+// 出し直すために持つ。DOM の文字列から日付を読み戻すことはできない
+// （書式が言語で変わるので、書いた文字列を解釈し直す羽目になる）。
+let currentRange = null;
 
-// フォームビューで満室になったときの文言。
-// 復帰時に「自分が出したメッセージか」を判別するため、定数として持つ。
-const SOLD_OUT_FORM_TEXT =
-  '手続き中に満室となりました。恐れ入りますが、別の日程か他の客室をご検討ください。';
+// フォームビューで満室の警告を出しているか。
+//
+// 以前は「表示中の文言が満室のメッセージと一致するか」で判別していたが、
+// 文言が言語で変わる以上、文字列の一致では判断できない
+// （日本語で警告を出したあと英語に切り替えると、自分が出した警告を
+// 他人のものと見なして消せなくなる）。状態として持つ方が確実。
+let showingSoldOutError = false;
+
+// 日付未選択のときに表示欄へ出す文言。
+// 定数ではなく関数にしてある。定数にすると読み込み時の言語で焼き付く。
+function noDatesText() {
+  return t('modal.noDates');
+}
 
 // ビュー（detail / form / complete）を切り替える
 function setView(view) {
@@ -100,11 +117,13 @@ function applySoldOutState() {
     if (soldOut) {
       // 入力欄には一切触れない。ここで reset や再描画をすると、
       // 入力済みの内容が消えて利用者の手間が丸ごと失われる。
-      showGeneralError(SOLD_OUT_FORM_TEXT);
+      showGeneralError(t('form.error.soldOut'));
+      showingSoldOutError = true;
       els.formBrowse.hidden = false;
-    } else if (els.generalError.textContent === SOLD_OUT_FORM_TEXT) {
+    } else if (showingSoldOutError) {
       // 自分が出した満室メッセージのときだけ消す。
       // 無条件に消すと、同時に出ていた入力エラーまで拭ってしまう。
+      showingSoldOutError = false;
       els.generalError.hidden = true;
       els.generalError.textContent = '';
       els.formBrowse.hidden = true;
@@ -148,7 +167,7 @@ function renderGuestOptions(room) {
     for (let n = 1; n <= room.capacity; n += 1) {
       const opt = document.createElement('option');
       opt.value = String(n);
-      opt.textContent = `${n}名`;
+      opt.textContent = tPlural('guests', n);
       select.appendChild(opt);
     }
   });
@@ -215,7 +234,8 @@ function applyCoupon() {
     return;
   }
   if (applied && applied.code === appliedCoupon) {
-    els.couponMsg.textContent = `${applied.label}を適用しました。`;
+    // 割引名は言語別フィールドのまま渡す。t() が現在の言語に解く。
+    els.couponMsg.textContent = t('modal.coupon.applied', { label: applied.label });
     track(EVENTS.COUPON_APPLIED, {
       code: appliedCoupon,
       roomId: currentRoom ? Number(currentRoom.id) : null,
@@ -223,7 +243,7 @@ function applyCoupon() {
     });
   } else if (applied) {
     // 併用不可なので、より値引き額の大きい割引が既に効いている場合はそちらが残る。
-    els.couponMsg.textContent = `${applied.label}の方が割引額が大きいため、そちらを適用しています。`;
+    els.couponMsg.textContent = t('modal.coupon.superseded', { label: applied.label });
     // 別の割引に負けた場合も「そのコードは効かなかった」ことに変わりはない。
     // どのコードが期待外れだったかは配信側が知る必要がある。
     track(EVENTS.COUPON_REJECTED, {
@@ -232,7 +252,7 @@ function applyCoupon() {
       roomId: currentRoom ? Number(currentRoom.id) : null,
     });
   } else {
-    els.couponMsg.textContent = 'このクーポンコードはご利用いただけません。';
+    els.couponMsg.textContent = t('modal.coupon.invalid');
     track(EVENTS.COUPON_REJECTED, {
       code: appliedCoupon,
       reason: 'invalid',
@@ -265,17 +285,19 @@ function onCheckinChange() {
  * @param {?{checkIn: string, checkOut: string, nights: number}} range 解除時は null
  */
 function onCalendarSelect(range) {
-  const { checkin, checkout, dates } = els;
+  const { checkin, checkout } = els;
+
+  currentRange = range || null;
 
   if (!range) {
     checkin.value = '';
     checkout.value = '';
-    dates.textContent = NO_DATES_TEXT;
   } else {
     checkin.value = range.checkIn;
     checkout.value = range.checkOut;
-    dates.textContent = `${range.checkIn} 〜 ${range.checkOut}（${range.nights}泊）`;
   }
+
+  renderSelectedDates();
 
   updatePricing();
   syncUrl();
@@ -293,6 +315,26 @@ function onCalendarSelect(range) {
       priceBand: lastBreakdown ? toPriceBand(lastBreakdown.total) : null,
     });
   }
+}
+
+/**
+ * 選択中の日程を表示欄に出す。
+ * 日付の書式は言語で変わるので、保持しているのは "YYYY-MM-DD" のままにして、
+ * 表示のたびにここで整形する。
+ */
+function renderSelectedDates() {
+  if (!els) return;
+
+  if (!currentRange) {
+    els.dates.textContent = noDatesText();
+    return;
+  }
+
+  els.dates.textContent = t('modal.selectedDates', {
+    checkIn: formatDate(currentRange.checkIn),
+    checkOut: formatDate(currentRange.checkOut),
+    nights: tPlural('nights', currentRange.nights),
+  });
 }
 
 /* ---------- URL への反映 ---------- */
@@ -332,9 +374,9 @@ async function shareCurrentUrl() {
     // 使えない環境では例外になるので、成否は必ず利用者に返す。
     if (!navigator.clipboard) throw new Error('clipboard API unavailable');
     await navigator.clipboard.writeText(window.location.href);
-    showToast('この条件のURLをコピーしました');
+    showToast(t('modal.shareCopied'));
   } catch (err) {
-    showToast('コピーできませんでした。URLバーからコピーしてください', {
+    showToast(t('modal.shareFailed'), {
       type: 'error',
     });
     // eslint-disable-next-line no-console
@@ -356,6 +398,7 @@ function clearErrors() {
     .forEach((el) => el.classList.remove('field__input--error'));
   els.generalError.hidden = true;
   els.generalError.textContent = '';
+  showingSoldOutError = false;
 }
 
 // 特定フィールドのエラー表示だけを消す（再入力時に呼ぶ）
@@ -370,6 +413,7 @@ function clearFieldError(field) {
   if (!soldOut) {
     els.generalError.hidden = true;
     els.generalError.textContent = '';
+    showingSoldOutError = false;
   }
 }
 
@@ -391,11 +435,11 @@ function showGeneralError(message) {
 function validateClient(values) {
   let ok = true;
   if (!values.guestName.trim()) {
-    showFieldError('guestName', '予約者名を入力してください。');
+    showFieldError('guestName', t('form.error.guestNameRequired'));
     ok = false;
   }
   if (!values.email.trim()) {
-    showFieldError('email', 'メールアドレスを入力してください。');
+    showFieldError('email', t('form.error.emailRequired'));
     ok = false;
   }
   return ok;
@@ -405,13 +449,8 @@ function validateClient(values) {
 // 人数 select は詳細ビューと共有しており openRoomModal で作り済みなので、ここでは触らない。
 function goToForm() {
   const nights = calcNights(els.checkin.value, els.checkout.value);
-  const totalText = lastBreakdown
-    ? `合計 ${formatMoney(lastBreakdown.total)}（${TOTAL_PRICE_NOTE}）`
-    : '';
-  els.formSummary.textContent =
-    `${currentRoom.name}｜${els.checkin.value} 〜 ${els.checkout.value}` +
-    `（${nights}泊 / ${totalText}）`;
 
+  renderFormSummary();
   clearErrors();
   setView('form');
 
@@ -421,6 +460,30 @@ function goToForm() {
     guests: Number(els.form.guests.value) || null,
     priceBand: lastBreakdown ? toPriceBand(lastBreakdown.total) : null,
     coupon: appliedCoupon || null,
+  });
+}
+
+/**
+ * フォーム上部の「部屋・日程・金額」の1行を組み立てる。
+ * 言語が変わったときにも同じ内容を作り直せるよう、関数に分けてある。
+ */
+function renderFormSummary() {
+  if (!els || !currentRoom) return;
+
+  const nights = calcNights(els.checkin.value, els.checkout.value);
+  const totalText = lastBreakdown
+    ? t('form.summaryTotal', {
+        amount: formatMoney(lastBreakdown.total),
+        note: totalPriceNote(),
+      })
+    : '';
+
+  els.formSummary.textContent = t('form.summary', {
+    room: roomName(currentRoom),
+    checkIn: formatDate(els.checkin.value),
+    checkOut: formatDate(els.checkout.value),
+    nights: tPlural('nights', nights),
+    total: totalText,
   });
 }
 
@@ -462,7 +525,7 @@ async function handleSubmit(e) {
 
   submitting = true;
   updateSubmitDisabled();
-  els.submitBtn.textContent = '送信中...';
+  els.submitBtn.textContent = t('form.submitting');
 
   try {
     const res = await createReservation(payload);
@@ -490,23 +553,26 @@ async function handleSubmit(e) {
       case 'VALIDATION_ERROR':
         // details の field ごとに対応項目へエラー表示
         (error.details || []).forEach((d) => showFieldError(d.field, d.message));
-        showGeneralError(error.message || '入力内容をご確認ください。');
+        // サーバーのメッセージがあればそれを出す（項目ごとの事情はサーバーが持つ）。
+        // 無ければこちらの汎用文。サーバー由来の文言の翻訳は API 側の責務で、
+        // フロントの辞書には置けない（何が返るか事前に分からない）。
+        showGeneralError(error.message || t('form.error.validation'));
         break;
       case 'OUT_OF_STOCK':
         // 満室：メッセージを表示し、一覧を更新してモーダルを閉じる。
         // 在庫のポーリング（notifyInventoryChange）を入れた後もこの分岐は残す。
         // ポーリングはあくまで数十秒遅れの予測であり、在庫を確定できるのは
         // 予約を実際に処理したサーバーの応答だけ ＝ こちらが最終的な真実。
-        showGeneralError('満室です。ご希望のお部屋は満室になりました。一覧に戻ります。');
+        showGeneralError(t('form.error.outOfStock'));
         if (onStockChange) onStockChange();
         autoCloseTimer = window.setTimeout(closeRoomModal, 1800);
         break;
       default:
         // その他：サーバーのメッセージをそのまま表示
-        showGeneralError(error.message || '予約に失敗しました。');
+        showGeneralError(error.message || t('form.error.failed'));
     }
   } catch (err) {
-    showGeneralError('通信に失敗しました。時間をおいて再度お試しください。');
+    showGeneralError(t('form.error.network'));
     // eslint-disable-next-line no-console
     console.error(err);
   } finally {
@@ -514,7 +580,7 @@ async function handleSubmit(e) {
     // 送信中に満室になっていた場合、ここで無条件に有効化すると
     // 押せる送信ボタンが戻ってしまうので、両方の理由を見て決め直す。
     updateSubmitDisabled();
-    els.submitBtn.textContent = 'この内容で予約する';
+    els.submitBtn.textContent = t('form.submit');
   }
 }
 
@@ -541,6 +607,37 @@ export function setDeepLinkDefaults(defaults) {
   deepLinkDefaults = defaults || null;
 }
 
+/**
+ * 見出し（画像・客室名・単価・説明）を現在の言語で組み立てる。
+ *
+ * innerHTML をやめて要素を組み立てている。単価は formatMoney が数値から
+ * 作った文字列なので安全だが、注記は辞書の値で、辞書は将来 CMS 由来に
+ * なり得る。文字列連結で HTML を作る経路を 1 つでも残すと、そこが
+ * そのまま持ち込みの入口になる。
+ */
+function renderRoomHeading() {
+  if (!els || !currentRoom) return;
+
+  els.img.src = resolveImageUrl(currentRoom.imagePath);
+  els.img.alt = roomName(currentRoom);
+  els.name.textContent = roomName(currentRoom);
+  els.desc.textContent = roomDescription(currentRoom);
+
+  // 見出しの単価もカード・カレンダーと同じ基準（税込・宿泊税別）で出す。
+  els.price.textContent = formatMoney(
+    toNightlyDisplayPrice(currentRoom.price, pricingRules),
+  );
+
+  const unit = document.createElement('span');
+  unit.textContent = t('rooms.perNight');
+
+  const note = document.createElement('small');
+  note.className = 'modal__tax-note';
+  note.textContent = nightlyPriceNote(pricingRules);
+
+  els.price.append(unit, note);
+}
+
 export function openRoomModal(room) {
   if (!els) return;
   currentRoom = room;
@@ -554,14 +651,7 @@ export function openRoomModal(room) {
   soldOut = !isBookable(room.stock);
   submitting = false;
 
-  els.img.src = resolveImageUrl(room.imagePath);
-  els.img.alt = room.name;
-  els.name.textContent = room.name;
-  // 見出しの単価もカード・カレンダーと同じ基準（税込・宿泊税別）で出す。
-  els.price.innerHTML =
-    `${formatMoney(toNightlyDisplayPrice(room.price, pricingRules))}<span>/泊</span>` +
-    `<small class="modal__tax-note">${nightlyPriceNote(pricingRules)}</small>`;
-  els.desc.textContent = room.description;
+  renderRoomHeading();
 
   // 月間料金カレンダー。部屋ごとに料金が違うので、開くたびに作り直す。
   // 前回のものが残っていれば先に破棄してから差し込む。
@@ -581,7 +671,8 @@ export function openRoomModal(room) {
     initialMonth: linkDates ? linkDates.checkIn.slice(0, 7) : null,
   });
   els.calendarMount.appendChild(calendar.el);
-  els.dates.textContent = NO_DATES_TEXT;
+  currentRange = null;
+  renderSelectedDates();
 
   // 人数の選択肢は部屋ごとに上限が違うので、開くたびに作り直す。
   renderGuestOptions(room);
@@ -728,9 +819,53 @@ function mountModal() {
   return modal;
 }
 
+/**
+ * モーダルの中で、言語が変わったときに作り直しが要るものをすべて描き直す。
+ *
+ * 静的なラベルは data-i18n が付いているので applyTranslations が面倒を見る。
+ * ここで扱うのはそれ以外 ＝ 実行時に値が決まるもの。
+ *
+ * 入力欄の値には触れない。言語を変えただけで入力途中の内容が消えるのは、
+ * 満室の警告で入力を消さないのと同じ理由で避ける。人数の選択肢だけは
+ * 作り直すが、選択中の値は syncGuests が保持役から書き戻す。
+ */
+function refreshLocalizedContent() {
+  if (!els) return;
+
+  // 差し込み済みのモーダル全体に、静的ラベルの翻訳を当て直す。
+  applyTranslations(els.modal);
+
+  // 閉じている間は中身を作り直さない。次に開くとき openRoomModal が
+  // その時点の言語で組み直すので、先回りしても無駄になる。
+  if (els.modal.hidden || !currentRoom) return;
+
+  renderRoomHeading();
+  renderSelectedDates();
+  renderFormSummary();
+
+  // 人数の選択肢（「2名」/「2 guests」）。保持役の値を控えて作り直し、書き戻す。
+  const selected = els.form.guests.value;
+  renderGuestOptions(currentRoom);
+  syncGuests(selected);
+
+  // 送信ボタンの文言は送信中かどうかで変わる。状態から導き直す。
+  els.submitBtn.textContent = submitting ? t('form.submitting') : t('form.submit');
+
+  // 満室の警告を出している最中なら、その文言も新しい言語で出し直す。
+  if (showingSoldOutError) showGeneralError(t('form.error.soldOut'));
+
+  // 料金内訳は自分で購読しているので、ここからは触らない。
+}
+
 export function initRoomModal(opts = {}) {
   const modal = mountModal();
   if (!modal) return;
+
+  // 差し込んだ直後に翻訳を当てる。文書全体の走査（lang.js の購読）は
+  // モーダルが body に入る前に済んでいることがあり、その順番だと
+  // テンプレートに書いた日本語がそのまま残る。差し込んだ側が
+  // 自分の要素を渡して呼ぶ形にすれば、起動の順番に左右されない。
+  applyTranslations(modal);
 
   onStockChange = opts.onStockChange || null;
 
@@ -778,6 +913,9 @@ export function initRoomModal(opts = {}) {
   });
 
   // 料金内訳はモーダルと同じ寿命なので、ここで一度だけ作って差し込む。
+  // 作り直す場合は前のものを破棄する（内訳も言語変更を購読しているため、
+  // 捨てただけだと DOM から外れた要素を相手に描き直しが走り続ける）。
+  if (breakdown) breakdown.destroy();
   breakdown = createPriceBreakdown();
   els.breakdownMount.appendChild(breakdown.el);
 
@@ -813,6 +951,12 @@ export function initRoomModal(opts = {}) {
 
   // クーポンは「適用」を押したときだけ効かせる。
   els.couponApply.addEventListener('click', applyCoupon);
+
+  // 言語が変わったら自分の中身を描き直す。モーダルはページと同じ寿命なので
+  // 通常は解除する場面がないが、initRoomModal が 2 度呼ばれたときに
+  // 購読が積み上がらないよう、前回ぶんを外してから張る。
+  if (unsubscribeLocale) unsubscribeLocale();
+  unsubscribeLocale = onLocaleChange(refreshLocalizedContent);
 
   // 料金ルールの取得。一覧カードやカレンダーと同じ1件を共有する（rulesStore）。
   // 取れるまで料金は出せないので、届いた時点で計算し直す。

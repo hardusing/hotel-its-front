@@ -7,8 +7,63 @@
 // 利用者が開いたまま日付を変えても、details の open は DOM に残るため
 // 中身だけ差し替えれば開いたまま更新される。
 
-import { formatMoney, formatMoneySigned } from './format.js';
-import { TOTAL_PRICE_NOTE } from './displayPrice.js';
+import { formatMoney, formatMoneySigned, formatPercent } from '../i18n/format.js';
+import { totalPriceNote } from './displayPrice.js';
+import { t, tPlural, localizeField, onLocaleChange } from '../i18n/index.js';
+
+/**
+ * calculator が返した「キー + 値」の記述を、表示用の 1 文にする。
+ *
+ * 金額・率・単複は、値の種類ごとに解き方が違う。calculator の側で
+ * 文字列にしてしまうと計算時の言語が焼き付くので、種類だけを伝えてもらい、
+ * 解くのは描画のたびにこちらで行う。
+ *
+ *   params   … そのまま埋める値（個数など）
+ *   money    … 金額。ロケールの通貨書式を通す
+ *   percents … 率。0.1 → "10%"（記号の位置も Intl に任せる）
+ *   plurals  … 数に応じて語形が変わる語。tPlural で "3泊" / "3 nights" にする
+ *
+ * @param {{key: string, params?: Object, money?: Object, percents?: Object, plurals?: Object}} part
+ * @returns {string}
+ */
+function resolvePart(part) {
+  const values = { ...(part.params || {}) };
+
+  Object.entries(part.money || {}).forEach(([name, amount]) => {
+    values[name] = formatMoney(amount);
+  });
+  Object.entries(part.percents || {}).forEach(([name, rate]) => {
+    values[name] = formatPercent(rate);
+  });
+  Object.entries(part.plurals || {}).forEach(([name, count]) => {
+    values[name] = tPlural(name, count);
+  });
+
+  return t(part.key, values);
+}
+
+/** 明細行のラベル。辞書のキーを持つ行と、データ由来の名前を持つ行がある。 */
+function resolveLabel(line) {
+  if (line.labelKey) {
+    return resolvePart({
+      key: line.labelKey,
+      params: line.labelParams,
+      percents: line.labelPercents,
+    });
+  }
+  // 客室名・割引名は言語別フィールドのまま届くので、ここで現在の言語に解く。
+  return localizeField(line.labelText);
+}
+
+/** 明細行の補足。複数の断片を空白で繋ぐ（断片ごとに括弧などは辞書側が持つ）。 */
+function resolveNote(line) {
+  if (line.noteParts) {
+    const text = line.noteParts.map(resolvePart).join(' ');
+    return text || undefined;
+  }
+  // 翻訳しない値（クーポンコードなど）はそのまま。
+  return line.note;
+}
 
 /**
  * 明細の金額を表示用の文字列にする。
@@ -28,13 +83,14 @@ function createRow(line) {
 
   const label = document.createElement('span');
   label.className = 'breakdown__label';
-  label.textContent = line.label;
+  label.textContent = resolveLabel(line);
 
   // 補足（計算根拠）は薄く小さく、ラベルの下にぶら下げる。
-  if (line.note) {
+  const noteText = resolveNote(line);
+  if (noteText) {
     const note = document.createElement('small');
     note.className = 'breakdown__note';
-    note.textContent = line.note;
+    note.textContent = noteText;
     label.appendChild(note);
   }
 
@@ -52,21 +108,36 @@ function createNightlyDetails(nightly) {
   details.className = 'breakdown__nightly';
 
   const summary = document.createElement('summary');
-  summary.textContent = `日別の室料（${nightly.length}泊）`;
+  summary.textContent = t('breakdown.nightlyTitle', {
+    nights: tPlural('nights', nightly.length),
+  });
   details.appendChild(summary);
 
   nightly.forEach((night) => {
     // 1泊ごとの内訳。加算・割引があるときだけ note に出す。
     const parts = [];
-    if (night.extraGuestCharge > 0) parts.push(`人数加算 ${formatMoney(night.extraGuestCharge)}`);
-    if (night.singleDiscount > 0) parts.push(`1名利用割引 ${formatMoneySigned(-night.singleDiscount)}`);
+    if (night.extraGuestCharge > 0) {
+      parts.push(t('breakdown.nightlyExtraGuest', {
+        amount: formatMoney(night.extraGuestCharge),
+      }));
+    }
+    if (night.singleDiscount > 0) {
+      parts.push(t('breakdown.nightlySingleDiscount', {
+        amount: formatMoneySigned(-night.singleDiscount),
+      }));
+    }
 
     details.appendChild(
       createRow({
         key: `night-${night.date}`,
-        label: night.date,
+        // 日付そのものは書式が言語で変わるが、明細では並べて比べる列なので
+        // ISO のまま出す（並び順が崩れず、桁も揃う）。
+        labelText: night.date,
         amount: night.subtotal,
-        note: parts.length > 0 ? `基本 ${formatMoney(night.baseRate)} / ${parts.join(' / ')}` : undefined,
+        note:
+          parts.length > 0
+            ? `${t('breakdown.nightlyBase', { amount: formatMoney(night.baseRate) })} / ${parts.join(' / ')}`
+            : undefined,
       }),
     );
   });
@@ -105,6 +176,10 @@ export function createPriceBreakdown() {
 
   el.append(summary, body);
 
+  // 直近に描いた内容。言語が変わったときに同じ結果で描き直すために持つ。
+  // 再計算はしない（金額は言語で変わらないし、計算のたびに通信も伴わない）。
+  let lastArgs = null;
+
   /**
    * 計算結果を反映する。
    *
@@ -118,8 +193,14 @@ export function createPriceBreakdown() {
       return;
     }
 
+    lastArgs = { breakdown, guests };
+
     total.textContent = formatMoney(breakdown.total);
-    meta.textContent = `${TOTAL_PRICE_NOTE} / ${guests}名${breakdown.nights}泊`;
+    meta.textContent = t('breakdown.meta', {
+      note: totalPriceNote(),
+      guests: tPlural('guests', guests),
+      nights: tPlural('nights', breakdown.nights),
+    });
 
     body.textContent = '';
 
@@ -140,11 +221,29 @@ export function createPriceBreakdown() {
 
   /** 表示を消す。open は保持したままにして、次に出したときの開閉を引き継ぐ。 */
   function clear() {
+    lastArgs = null;
     el.hidden = true;
     total.textContent = '';
     meta.textContent = '';
     body.textContent = '';
   }
 
-  return { el, update, clear };
+  // 言語が変わったら、直近の結果でそのまま描き直す。
+  // 隠れている（まだ計算していない）ときは何もしない。次に update が
+  // 呼ばれた時点の言語で描かれるので、先回りする意味がない。
+  const unsubscribeLocale = onLocaleChange(() => {
+    if (lastArgs) update(lastArgs.breakdown, lastArgs.guests);
+  });
+
+  return {
+    el,
+    update,
+    clear,
+
+    /** 購読を外す。使い捨てにする場合は必ず呼ぶ。 */
+    destroy() {
+      unsubscribeLocale();
+      el.remove();
+    },
+  };
 }

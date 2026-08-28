@@ -1,9 +1,11 @@
 // 在庫数の「意味づけ」を一箇所に集めたモジュール。
-// DOM も API も参照しない純粋関数だけを置く。
+// DOM も API も参照しない関数だけを置く。
 //
 // 残室数をどこで何室以下と呼ぶか、どう表示するか、どの修飾子を当てるかが
 // カード・モーダル・カレンダーに散ると、同じ在庫でも画面ごとに表記が食い違う。
 // 判断はここに閉じ込め、呼び出し側は stock を渡して結果を受け取るだけにする。
+
+import { t } from '../i18n/index.js';
 
 // 在庫の状態。CSS の修飾子名とも対応する。
 export const STOCK_LEVELS = {
@@ -50,16 +52,22 @@ export function isBookable(stock) {
  * 残り 4 室以上を実数で出さないのは、多いときに具体的な数字を見せても
  * 判断の役に立たず、数字が動くたび画面が騒がしくなるため。
  *
+ * このモジュール自身は DOM を持たないので onLocaleChange は購読しない。
+ * 代わりに「呼ばれた時点の言語」で文言を作る（t() は getLocale() を毎回読む）。
+ * 描き直しの責任は、この関数を呼んで DOM に書く側 ＝ カード（renderRooms）と
+ * カレンダー（monthCalendar）にある。ここで購読して何かを書き換えようとしても、
+ * 自分が過去に返した文字列がどの要素に入ったかを知る手段がない。
+ *
  * @param {number} stock 残室数
  * @returns {string} 満室 / 残り1室 / 残り{n}室 / 空室あり
  */
 export function getStockLabel(stock) {
   const level = getStockLevel(stock);
 
-  if (level === STOCK_LEVELS.SOLDOUT) return '満室';
-  if (level === STOCK_LEVELS.LAST) return '残り1室';
-  if (level === STOCK_LEVELS.FEW) return `残り${Number(stock)}室`;
-  return '空室あり';
+  if (level === STOCK_LEVELS.SOLDOUT) return t('stock.soldOut');
+  if (level === STOCK_LEVELS.LAST) return t('stock.last');
+  if (level === STOCK_LEVELS.FEW) return t('stock.few', { count: Number(stock) });
+  return t('stock.plenty');
 }
 
 /**
